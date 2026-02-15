@@ -59,7 +59,8 @@ const FileUploader = ({ onUpload, type, title }) => {
         } catch (error) {
             console.error('Upload failed:', error);
             const errorMessage = error.response?.data?.error || error.message || 'Unknown error';
-            alert(`Upload failed: ${errorMessage}`);
+            const targetUrl = error.config?.url ? `\nTarget: ${error.config.url}` : '';
+            alert(`Upload failed: ${errorMessage}${targetUrl}`);
         } finally {
             setUploading(false);
         }

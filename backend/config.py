@@ -27,6 +27,9 @@ class Config:
     @staticmethod
     def init_app(app):
         """Initialize application configuration"""
+        # Set Flask-specific limits
+        app.config['MAX_CONTENT_LENGTH'] = Config.MAX_FILE_SIZE
+        
         # Create upload directories
         os.makedirs(os.path.join(Config.UPLOAD_FOLDER, 'question_papers'), exist_ok=True)
         os.makedirs(os.path.join(Config.UPLOAD_FOLDER, 'answer_sheets'), exist_ok=True)
