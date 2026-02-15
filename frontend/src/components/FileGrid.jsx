@@ -1,13 +1,23 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileText, Eye, Pencil } from 'lucide-react';
 import { getThumbnailUrl } from '../services/api';
+import DocumentModal from './DocumentModal';
 
 const FileGrid = ({ files, onRefresh }) => {
     const navigate = useNavigate();
+    const [selectedFile, setSelectedFile] = useState(null);
 
     const handleEvaluate = (file) => {
         navigate(`/evaluate/${file.id}`);
+    };
+
+    const handleView = (file) => {
+        if (file.type === 'answer_sheet') {
+            navigate(`/evaluate/${file.id}`);
+        } else {
+            setSelectedFile(file);
+        }
     };
 
     const getTypeColor = (type) => {
@@ -57,13 +67,18 @@ const FileGrid = ({ files, onRefresh }) => {
 
                         {/* Hover overlay */}
                         <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-70 transition-all flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100">
-                            <button className="btn btn-ghost p-3">
+                            <button
+                                onClick={() => handleView(file)}
+                                className="btn btn-ghost p-3"
+                                title="View PDF"
+                            >
                                 <Eye className="w-5 h-5" />
                             </button>
                             {file.type === 'answer_sheet' && (
                                 <button
                                     onClick={() => handleEvaluate(file)}
                                     className="btn btn-primary p-3"
+                                    title="Evaluate"
                                 >
                                     <Pencil className="w-5 h-5" />
                                 </button>
@@ -85,6 +100,14 @@ const FileGrid = ({ files, onRefresh }) => {
                     </div>
                 </div>
             ))}
+
+            {selectedFile && (
+                <DocumentModal
+                    file={selectedFile}
+                    title={selectedFile.title || selectedFile.student_name}
+                    onClose={() => setSelectedFile(null)}
+                />
+            )}
         </div>
     );
 };
