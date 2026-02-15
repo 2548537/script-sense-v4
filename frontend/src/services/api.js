@@ -22,9 +22,7 @@ console.log("🚀 ScriptSense Final API URL:", API_BASE_URL);
 
 const api = axios.create({
     baseURL: API_BASE_URL,
-    headers: {
-        'Content-Type': 'application/json',
-    },
+    // REMOVED default Content-Type: application/json as it can interfere with multipart/form-data
 });
 
 // Add error logging interceptor
@@ -49,9 +47,7 @@ export const uploadQuestionPaper = async (file, title, totalQuestions) => {
     formData.append('title', title);
     formData.append('total_questions', totalQuestions);
 
-    const response = await api.post('/upload/question-paper', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-    });
+    const response = await api.post('/upload/question-paper', formData);
     return response.data;
 };
 
@@ -61,9 +57,7 @@ export const uploadAnswerSheet = async (file, studentName, questionPaperId) => {
     formData.append('student_name', studentName);
     if (questionPaperId) formData.append('question_paper_id', questionPaperId);
 
-    const response = await api.post('/upload/answer-sheet', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-    });
+    const response = await api.post('/upload/answer-sheet', formData);
     return response.data;
 };
 
@@ -72,9 +66,7 @@ export const uploadRubric = async (file, title) => {
     formData.append('file', file);
     formData.append('title', title);
 
-    const response = await api.post('/upload/rubric', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-    });
+    const response = await api.post('/upload/rubric', formData);
     return response.data;
 };
 
