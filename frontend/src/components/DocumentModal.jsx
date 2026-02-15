@@ -37,19 +37,42 @@ const DocumentModal = ({ file, onClose, title }) => {
                 </div>
 
                 {/* PDF Content */}
-                <div className="flex-1 overflow-auto p-6">
-                    <div className="flex flex-col items-center">
+                <div className="flex-1 overflow-auto p-2 md:p-6 bg-gray-900 border-t border-white border-opacity-10">
+                    <div className="flex flex-col items-center min-h-full">
                         <Document
                             file={pdfUrl}
                             onLoadSuccess={onDocumentLoadSuccess}
-                            loading={<div className="spinner mx-auto"></div>}
-                            error={<div className="text-red-500">Failed to load PDF. Please try again.</div>}
+                            loading={
+                                <div className="flex flex-col items-center gap-4 py-20">
+                                    <div className="spinner"></div>
+                                    <p className="text-gray-400">Loading Document...</p>
+                                </div>
+                            }
+                            error={
+                                <div className="w-full h-[60vh] flex flex-col items-center justify-center gap-4">
+                                    <p className="text-red-400 font-medium">Enhanced Viewer failed to load.</p>
+                                    <iframe
+                                        src={pdfUrl}
+                                        className="w-full h-full border-0 rounded-xl bg-white"
+                                        title="PDF Fallback"
+                                    />
+                                    <a
+                                        href={pdfUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="btn btn-primary mt-4"
+                                    >
+                                        Open in New Tab
+                                    </a>
+                                </div>
+                            }
                         >
                             <Page
                                 pageNumber={currentPage}
-                                width={Math.min(window.innerWidth - 200, 800)}
-                                renderTextLayer={true}
-                                renderAnnotationLayer={true}
+                                width={Math.min(window.innerWidth - 40, 800)}
+                                renderTextLayer={false}
+                                renderAnnotationLayer={false}
+                                className="shadow-2xl rounded-lg overflow-hidden"
                             />
                         </Document>
 

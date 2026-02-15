@@ -13,11 +13,7 @@ const FileGrid = ({ files, onRefresh }) => {
     };
 
     const handleView = (file) => {
-        if (file.type === 'answer_sheet') {
-            navigate(`/evaluate/${file.id}`);
-        } else {
-            setSelectedFile(file);
-        }
+        setSelectedFile(file);
     };
 
     const getTypeColor = (type) => {
@@ -65,22 +61,22 @@ const FileGrid = ({ files, onRefresh }) => {
                             }}
                         />
 
-                        {/* Hover overlay */}
-                        <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-70 transition-all flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100">
+                        {/* Hover overlay - Persistent visibility on mobile */}
+                        <div className="absolute inset-0 bg-black bg-opacity-20 md:bg-opacity-0 group-hover:bg-opacity-70 transition-all flex items-center justify-center gap-3 opacity-100 md:opacity-0 group-hover:opacity-100">
                             <button
-                                onClick={() => handleView(file)}
-                                className="btn btn-ghost p-3"
+                                onClick={(e) => { e.stopPropagation(); handleView(file); }}
+                                className="btn btn-ghost p-4 rounded-full shadow-2xl"
                                 title="View PDF"
                             >
-                                <Eye className="w-5 h-5" />
+                                <Eye className="w-6 h-6" />
                             </button>
                             {file.type === 'answer_sheet' && (
                                 <button
-                                    onClick={() => handleEvaluate(file)}
-                                    className="btn btn-primary p-3"
+                                    onClick={(e) => { e.stopPropagation(); handleEvaluate(file); }}
+                                    className="btn btn-primary p-4 rounded-full shadow-2xl"
                                     title="Evaluate"
                                 >
-                                    <Pencil className="w-5 h-5" />
+                                    <Pencil className="w-6 h-6" />
                                 </button>
                             )}
                         </div>
