@@ -18,25 +18,30 @@ def auto_scan():
         answer_sheet_id = data.get('answersheetId')
         page_number = data.get('page', 0)
         
+        print(f"🔍 Auto-scan request: ID={answer_sheet_id}, Page={page_number}")
+        
         # Get answer sheet
         answer_sheet = AnswerSheet.query.get_or_404(answer_sheet_id)
         
-        # Convert full page to image (high res for OCR)
+        # Convert full page to image (Medium res for memory safety on production)
+        print(f"📄 Processing PDF: {answer_sheet.file_path}")
         image = PDFProcessor.pdf_page_to_image(
             answer_sheet.file_path,
             page_number,
-            zoom=3.0 # High resolution for full page analysis
+            zoom=2.0 # Reduced from 3.0 for production stability
         )
+        print(f"🖼️ Full page image generated: {image.size}")
         
         # Perform automatic analysis
+        print(f"🤖 Sending to Gemini...")
         result = ocr_service.auto_analyze_page(image, is_path=False)
+        print(f"✅ Gemini response received. success={result.get('success')}")
         
         # Process detected diagrams
         processed_diagrams = []
-        for diag in result.get('diagrams', []):
+        for i, diag in enumerate(result.get('diagrams', [])):
             bbox = diag.get('bounding_box') # [ymin, xmin, ymax, xmax] in 0-1000
             if bbox and len(bbox) == 4:
-                # Convert normalized [0-1000] to [0-1] for extract_region
                 norm_coords = {
                     'y': bbox[0] / 1000.0,
                     'x': bbox[1] / 1000.0,
@@ -45,14 +50,13 @@ def auto_scan():
                 }
                 
                 try:
-                    # Extract high-res region for diagram
+                    print(f"📐 Extracting diagram {i+1}...")
                     diag_image = PDFProcessor.extract_region(
                         answer_sheet.file_path,
                         page_number,
                         norm_coords
                     )
                     
-                    # Convert to base64
                     img_buffer = io.BytesIO()
                     diag_image.save(img_buffer, format='PNG')
                     diag_img_base64 = base64.b64encode(img_buffer.getvalue()).decode('utf-8')
@@ -62,16 +66,17 @@ def auto_scan():
                         'image': f"data:image/png;base64,{diag_img_base64}"
                     })
                 except Exception as ex:
-                    print(f"Failed to extract diagram: {ex}")
+                    print(f"⚠️ Failed to extract diagram {i+1}: {ex}")
         
         return jsonify({
             'transcription': result.get('transcription', ''),
             'diagrams': processed_diagrams,
-            'success': result.get('success', False)
+            'success': result.get('success', False),
+            'error': result.get('error') if not result.get('success') else None
         }), 200
         
     except Exception as e:
-        print(f"Error in auto-scan: {str(e)}")
+        print(f"❌ CRITICAL error in auto-scan: {str(e)}")
         return jsonify({'error': str(e), 'success': False}), 500
 
 @evaluation_bp.route('/transcribe', methods=['POST'])

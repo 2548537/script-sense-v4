@@ -163,13 +163,21 @@ class GeminiOCRService:
             6. Return ONLY the JSON object. No other text."""
             
             # Using JSON mode if supported or just standard generation
-            response = self.model.generate_content(
-                [prompt, image],
-                generation_config={"response_mime_type": "application/json"}
-            )
-            
-            import json
-            if response and response.text:
+            try:
+                response = self.model.generate_content(
+                    [prompt, image],
+                    generation_config={"response_mime_type": "application/json"}
+                )
+                
+                if not response or not response.text:
+                    return {
+                        'transcription': "AI returned an empty response.",
+                        'diagrams': [],
+                        'success': False,
+                        'error': "Empty response from Gemini"
+                    }
+
+                import json
                 try:
                     result = json.loads(response.text)
                     return {
@@ -178,17 +186,22 @@ class GeminiOCRService:
                         'success': True
                     }
                 except json.JSONDecodeError:
-                    # Fallback if JSON isn't perfect but present
                     return {
-                        'transcription': "Error: Failed to parse AI response as JSON.",
+                        'transcription': "Failed to parse AI response as JSON.",
                         'diagrams': [],
-                        'success': False
+                        'success': False,
+                        'error': f"JSON Decode Error: {response.text[:100]}"
                     }
-            else:
+            except Exception as e:
+                # Handle safety filters or blocked responses
+                error_msg = str(e)
+                if "safety" in error_msg.lower():
+                    error_msg = "Content flagged by safety filters. Please ensure the handwriting is clear and appropriate."
                 return {
-                    'transcription': "No response from AI.",
+                    'transcription': "AI Analysis failed.",
                     'diagrams': [],
-                    'success': False
+                    'success': False,
+                    'error': error_msg
                 }
                 
         except Exception as e:
