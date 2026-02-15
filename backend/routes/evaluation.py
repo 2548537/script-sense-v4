@@ -10,6 +10,70 @@ evaluation_bp = Blueprint('evaluation', __name__)
 # Initialize OCR service
 ocr_service = GeminiOCRService()
 
+@evaluation_bp.route('/auto-scan', methods=['POST'])
+def auto_scan():
+    """Automatically scan a full page for transcription and diagrams"""
+    try:
+        data = request.json
+        answer_sheet_id = data.get('answersheetId')
+        page_number = data.get('page', 0)
+        
+        # Get answer sheet
+        answer_sheet = AnswerSheet.query.get_or_404(answer_sheet_id)
+        
+        # Convert full page to image (high res for OCR)
+        image = PDFProcessor.pdf_page_to_image(
+            answer_sheet.file_path,
+            page_number,
+            zoom=3.0 # High resolution for full page analysis
+        )
+        
+        # Perform automatic analysis
+        result = ocr_service.auto_analyze_page(image, is_path=False)
+        
+        # Process detected diagrams
+        processed_diagrams = []
+        for diag in result.get('diagrams', []):
+            bbox = diag.get('bounding_box') # [ymin, xmin, ymax, xmax] in 0-1000
+            if bbox and len(bbox) == 4:
+                # Convert normalized [0-1000] to [0-1] for extract_region
+                norm_coords = {
+                    'y': bbox[0] / 1000.0,
+                    'x': bbox[1] / 1000.0,
+                    'height': (bbox[2] - bbox[0]) / 1000.0,
+                    'width': (bbox[3] - bbox[1]) / 1000.0
+                }
+                
+                try:
+                    # Extract high-res region for diagram
+                    diag_image = PDFProcessor.extract_region(
+                        answer_sheet.file_path,
+                        page_number,
+                        norm_coords
+                    )
+                    
+                    # Convert to base64
+                    img_buffer = io.BytesIO()
+                    diag_image.save(img_buffer, format='PNG')
+                    diag_img_base64 = base64.b64encode(img_buffer.getvalue()).decode('utf-8')
+                    
+                    processed_diagrams.append({
+                        'description': diag.get('description', 'Diagram'),
+                        'image': f"data:image/png;base64,{diag_img_base64}"
+                    })
+                except Exception as ex:
+                    print(f"Failed to extract diagram: {ex}")
+        
+        return jsonify({
+            'transcription': result.get('transcription', ''),
+            'diagrams': processed_diagrams,
+            'success': result.get('success', False)
+        }), 200
+        
+    except Exception as e:
+        print(f"Error in auto-scan: {str(e)}")
+        return jsonify({'error': str(e), 'success': False}), 500
+
 @evaluation_bp.route('/transcribe', methods=['POST'])
 def transcribe():
     """Transcribe handwriting from a specific region of an answer sheet"""
@@ -281,3 +345,37 @@ def export_results():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+@evaluation_bp.route('/zoom', methods=['POST'])
+def zoom_region():
+    """Crop and return a high-resolution zoomed version of a region"""
+    try:
+        data = request.json
+        answer_sheet_id = data.get('answersheetId')
+        page_number = data.get('page', 0)
+        coordinates = data.get('coordinates')
+        
+        if not all([answer_sheet_id, coordinates]):
+            return jsonify({'error': 'Missing required fields'}), 400
+            
+        answer_sheet = AnswerSheet.query.get_or_404(answer_sheet_id)
+        
+        # Extract region with high quality (zoom=4.0)
+        zoom_image = PDFProcessor.extract_region(
+            answer_sheet.file_path,
+            page_number,
+            coordinates
+        )
+        
+        # Convert to base64
+        img_buffer = io.BytesIO()
+        zoom_image.save(img_buffer, format='PNG')
+        img_base64 = base64.b64encode(img_buffer.getvalue()).decode('utf-8')
+        
+        return jsonify({
+            'image': f"data:image/png;base64,{img_base64}",
+            'success': True
+        }), 200
+        
+    except Exception as e:
+        print(f"Error in zoom: {str(e)}")
+        return jsonify({'error': str(e), 'success': False}), 500

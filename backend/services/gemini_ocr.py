@@ -124,16 +124,84 @@ class GeminiOCRService:
                 'image_available': False
             }
     
+    def auto_analyze_page(self, image_data, is_path=True):
+        """
+        Automatically analyze a full page to extract transcription and diagram bounding boxes.
+        
+        Args:
+            image_data: File path or PIL Image object
+            is_path: Whether image_data is a file path
+            
+        Returns:
+            Dictionary with transcription and a list of diagram objects
+        """
+        try:
+            if is_path:
+                image = Image.open(image_data)
+            else:
+                image = image_data
+            
+            prompt = """Analyze this image of an academic answer sheet. I need a complete transcription of all handwritten text and identification of all diagrams.
+            
+            Return the result in a valid JSON format with the following structure:
+            {
+              "transcription": "The full transcription of all text on the page, preserving order and using actual symbols (θ, μ, ρ, v², etc.)",
+              "diagrams": [
+                {
+                  "description": "Short description of what the diagram represents",
+                  "bounding_box": [ymin, xmin, ymax, xmax] 
+                }
+              ]
+            }
+
+            CRITICAL FOR DIAGRAMS:
+            1. Bounding boxes MUST be in normalized coordinates [0-1000] where [0,0] is top-left and [1000,1000] is bottom-right.
+            2. Be GENEROUS with diagram bounding boxes. Include all related labels, vectors, axis titles, and satellite components.
+            3. If a diagram has labels (like 'mg', 'R sin θ', 'F cos θ') nearby, they MUST be included in the bounding box.
+            4. If there are no diagrams, return an empty list for "diagrams".
+            5. Use actual symbols for Math/Science notation.
+            6. Return ONLY the JSON object. No other text."""
+            
+            # Using JSON mode if supported or just standard generation
+            response = self.model.generate_content(
+                [prompt, image],
+                generation_config={"response_mime_type": "application/json"}
+            )
+            
+            import json
+            if response and response.text:
+                try:
+                    result = json.loads(response.text)
+                    return {
+                        'transcription': result.get('transcription', ''),
+                        'diagrams': result.get('diagrams', []),
+                        'success': True
+                    }
+                except json.JSONDecodeError:
+                    # Fallback if JSON isn't perfect but present
+                    return {
+                        'transcription': "Error: Failed to parse AI response as JSON.",
+                        'diagrams': [],
+                        'success': False
+                    }
+            else:
+                return {
+                    'transcription': "No response from AI.",
+                    'diagrams': [],
+                    'success': False
+                }
+                
+        except Exception as e:
+            print(f"Error in automatic analysis: {str(e)}")
+            return {
+                'transcription': f"Error: {str(e)}",
+                'diagrams': [],
+                'success': False
+            }
+
     def process_pdf_region(self, image_data, coordinates=None):
         """
         Process a specific region of a PDF page
-        
-        Args:
-            image_data: PIL Image object
-            coordinates: Optional dict with {x, y, width, height} to crop region
-            
-        Returns:
-            Dictionary with transcription and diagram info
         """
         try:
             image = image_data

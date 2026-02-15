@@ -136,9 +136,9 @@ const GradingPanel = ({ answersheetId, answerSheet, questionPapers, rubrics, onV
     if (evaluationComplete) {
         return (
             <div className="glass-strong h-full rounded-xl overflow-hidden flex flex-col p-6">
-                <div className="flex items-center gap-2 mb-6 border-b border-white border-opacity-10 pb-4">
-                    <CheckCircle className="w-6 h-6 text-green-400" />
-                    <h2 className="text-xl font-bold">Evaluation Summary (Marks Card)</h2>
+                <div className="flex items-center gap-2 mb-4 md:mb-6 border-b border-white border-opacity-10 pb-4">
+                    <CheckCircle className="w-5 h-5 md:w-6 md:h-6 text-green-400" />
+                    <h2 className="text-lg md:text-xl font-bold">Evaluation Summary</h2>
                 </div>
 
                 <div className="flex-1 overflow-auto space-y-6">
@@ -177,10 +177,10 @@ const GradingPanel = ({ answersheetId, answerSheet, questionPapers, rubrics, onV
                     </div>
                 </div>
 
-                <div className="mt-6 pt-4 border-t border-white border-opacity-10 flex gap-3">
+                <div className="mt-6 pt-4 border-t border-white border-opacity-10 flex flex-col sm:flex-row gap-3">
                     <button
                         onClick={() => setEvaluationComplete(false)}
-                        className="flex-1 btn btn-ghost"
+                        className="flex-1 btn btn-ghost py-2 md:py-3"
                     >
                         Back to Grading
                     </button>
@@ -212,9 +212,9 @@ const GradingPanel = ({ answersheetId, answerSheet, questionPapers, rubrics, onV
                 </div>
 
                 {/* selectors */}
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <select
-                        className="bg-black bg-opacity-30 border border-white border-opacity-10 rounded px-2 py-1 text-xs outline-none"
+                        className="bg-black bg-opacity-30 border border-white border-opacity-10 rounded px-2 py-2 text-xs outline-none"
                         value={activeQuestionPaper?.id || ''}
                         onChange={(e) => setActiveQuestionPaper(questionPapers.find(qp => qp.id === parseInt(e.target.value)))}
                     >
@@ -223,7 +223,7 @@ const GradingPanel = ({ answersheetId, answerSheet, questionPapers, rubrics, onV
                         ))}
                     </select>
                     <select
-                        className="bg-black bg-opacity-30 border border-white border-opacity-10 rounded px-2 py-1 text-xs outline-none"
+                        className="bg-black bg-opacity-30 border border-white border-opacity-10 rounded px-2 py-2 text-xs outline-none"
                         value={activeRubric?.id || ''}
                         onChange={(e) => setActiveRubric(rubrics.find(r => r.id === parseInt(e.target.value)))}
                     >
@@ -305,7 +305,7 @@ const GradingPanel = ({ answersheetId, answerSheet, questionPapers, rubrics, onV
                                 value={marksAwarded}
                                 onChange={(e) => setMarksAwarded(e.target.value)}
                                 placeholder="0"
-                                className="w-full px-4 py-3 bg-white bg-opacity-10 rounded-lg border border-white border-opacity-20 focus:border-primary-500 outline-none text-lg font-semibold"
+                                className="w-full px-4 py-2 md:py-3 bg-white bg-opacity-10 rounded-lg border border-white border-opacity-20 focus:border-primary-500 outline-none text-lg font-semibold"
                             />
                         </div>
 
@@ -317,7 +317,7 @@ const GradingPanel = ({ answersheetId, answerSheet, questionPapers, rubrics, onV
                                 value={maxMarks}
                                 onChange={(e) => setMaxMarks(e.target.value)}
                                 placeholder="0"
-                                className="w-full px-4 py-3 bg-white bg-opacity-10 rounded-lg border border-white border-opacity-20 focus:border-primary-500 outline-none text-lg font-semibold"
+                                className="w-full px-4 py-2 md:py-3 bg-white bg-opacity-10 rounded-lg border border-white border-opacity-20 focus:border-primary-500 outline-none text-lg font-semibold"
                             />
                         </div>
 

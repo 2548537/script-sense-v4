@@ -77,6 +77,14 @@ export const getThumbnailUrl = (fileId, type) => {
 };
 
 // Evaluation services
+export const autoScanPage = async (answersheetId, page) => {
+    const response = await api.post('/evaluate/auto-scan', {
+        answersheetId,
+        page
+    });
+    return response.data;
+};
+
 export const transcribeRegion = async (answersheetId, page, coordinates) => {
     const response = await api.post('/evaluate/transcribe', {
         answersheetId,
@@ -125,6 +133,20 @@ export const saveReport = async (answersheetId, remarks) => {
     const response = await api.post('/evaluate/save-report', {
         answersheetId,
         remarks
+    });
+    return response.data;
+};
+
+export const deleteFile = async (fileId, type) => {
+    const response = await api.delete(`/upload/files/${fileId}?type=${type}`);
+    return response.data;
+};
+
+export const zoomRegion = async (answersheetId, page, coordinates) => {
+    const response = await api.post('/evaluate/zoom', {
+        answersheetId,
+        page,
+        coordinates
     });
     return response.data;
 };

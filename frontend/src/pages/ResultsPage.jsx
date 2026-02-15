@@ -125,8 +125,8 @@ const ResultsPage = () => {
                                         </td>
                                         <td className="p-4 text-right">
                                             <span className={`px-2 py-1 rounded text-xs font-semibold ${result.percentage >= 70 ? 'bg-green-500 bg-opacity-20 text-green-300' :
-                                                    result.percentage >= 40 ? 'bg-yellow-500 bg-opacity-20 text-yellow-300' :
-                                                        'bg-red-500 bg-opacity-20 text-red-300'
+                                                result.percentage >= 40 ? 'bg-yellow-500 bg-opacity-20 text-yellow-300' :
+                                                    'bg-red-500 bg-opacity-20 text-red-300'
                                                 }`}>
                                                 {result.percentage}%
                                             </span>
@@ -137,10 +137,11 @@ const ResultsPage = () => {
                                         <td className="p-4 text-center">
                                             <button
                                                 onClick={() => navigate(`/evaluate/${result.id}`)}
-                                                className="p-2 hover:bg-white hover:bg-opacity-10 rounded text-primary-300"
+                                                className="flex items-center justify-center gap-1.5 mx-auto px-3 py-1.5 hover:bg-white hover:bg-opacity-10 rounded text-primary-300 transition-all text-xs font-medium"
                                                 title="View Marks Card"
                                             >
-                                                <Eye className="w-5 h-5" />
+                                                <Eye className="w-4 h-4" />
+                                                View Details
                                             </button>
                                         </td>
                                     </tr>

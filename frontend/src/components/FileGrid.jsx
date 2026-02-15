@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { FileText, Eye, Pencil } from 'lucide-react';
-import { getThumbnailUrl } from '../services/api';
+import { useNavigate, Link } from 'react-router-dom';
+import { FileText, Eye, Pencil, Trash2, Loader2 } from 'lucide-react';
+import { getThumbnailUrl, deleteFile } from '../services/api';
 import DocumentModal from './DocumentModal';
 
 const FileGrid = ({ files, onRefresh }) => {
     const navigate = useNavigate();
     const [selectedFile, setSelectedFile] = useState(null);
+    const [deletingId, setDeletingId] = useState(null);
 
     const handleEvaluate = (file) => {
         navigate(`/evaluate/${file.id}`);
@@ -14,6 +15,22 @@ const FileGrid = ({ files, onRefresh }) => {
 
     const handleView = (file) => {
         setSelectedFile(file);
+    };
+
+    const handleDelete = async (file) => {
+        if (window.confirm(`Are you sure you want to delete "${file.student_name || file.title}"? This action cannot be undone.`)) {
+            setDeletingId(file.id);
+            try {
+                const type = file.type.replace('_sheet', '').replace('_paper', '');
+                await deleteFile(file.id, type);
+                onRefresh?.();
+            } catch (error) {
+                console.error('Failed to delete file:', error);
+                alert('Failed to delete file');
+            } finally {
+                setDeletingId(null);
+            }
+        }
     };
 
     const getTypeColor = (type) => {
@@ -48,7 +65,7 @@ const FileGrid = ({ files, onRefresh }) => {
             {files.map((file) => (
                 <div
                     key={`${file.type}-${file.id}`}
-                    className="glass card-hover group relative overflow-hidden rounded-xl"
+                    className={`glass card-hover group relative overflow-hidden rounded-xl ${deletingId === file.id ? 'opacity-50 pointer-events-none' : ''}`}
                 >
                     {/* Thumbnail */}
                     <div className="aspect-[3/4] bg-gray-800 relative overflow-hidden">
@@ -79,6 +96,13 @@ const FileGrid = ({ files, onRefresh }) => {
                                     <Pencil className="w-6 h-6" />
                                 </button>
                             )}
+                            <button
+                                onClick={(e) => { e.stopPropagation(); handleDelete(file); }}
+                                className="btn btn-ghost p-4 rounded-full shadow-2xl text-red-400 hover:text-red-500 hover:bg-red-500 hover:bg-opacity-10"
+                                title="Delete File"
+                            >
+                                {deletingId === file.id ? <Loader2 className="w-6 h-6 animate-spin" /> : <Trash2 className="w-6 h-6" />}
+                            </button>
                         </div>
                     </div>
 
@@ -87,12 +111,41 @@ const FileGrid = ({ files, onRefresh }) => {
                         <div className={`inline-block px-3 py-1 rounded-full text-xs font-medium bg-gradient-to-r ${getTypeColor(file.type)} mb-2`}>
                             {getTypeLabel(file.type)}
                         </div>
-                        <h4 className="font-semibold text-lg mb-1 truncate">
+                        <h4 className="font-semibold text-lg mb-1 truncate group-hover:text-primary-400 transition-colors">
                             {file.student_name || file.title}
                         </h4>
-                        <p className="text-sm text-gray-400">
+                        <p className="text-sm text-gray-400 mb-4">
                             {new Date(file.uploaded_at).toLocaleDateString()}
                         </p>
+
+                        {/* Explicit Links for Mobile/Tablet */}
+                        <div className="flex items-center justify-between border-t border-white border-opacity-10 pt-4">
+                            <div className="flex items-center gap-4">
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); handleView(file); }}
+                                    className="flex items-center gap-1.5 text-xs font-medium text-gray-400 hover:text-white transition-colors"
+                                >
+                                    <Eye className="w-3.5 h-3.5" />
+                                    View
+                                </button>
+                                {file.type === 'answer_sheet' && (
+                                    <Link
+                                        to={`/evaluate/${file.id}`}
+                                        className="flex items-center gap-1.5 text-xs font-medium text-primary-400 hover:text-primary-300 transition-colors"
+                                    >
+                                        <Pencil className="w-3.5 h-3.5" />
+                                        Evaluate
+                                    </Link>
+                                )}
+                            </div>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); handleDelete(file); }}
+                                className="text-gray-500 hover:text-red-500 transition-colors"
+                                title="Delete"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                            </button>
+                        </div>
                     </div>
                 </div>
             ))}

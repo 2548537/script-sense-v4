@@ -239,3 +239,41 @@ def get_thumbnail(file_id):
         
     except Exception as e:
         return jsonify({'error': str(e)}), 404
+@upload_bp.route('/files/<int:file_id>', methods=['DELETE'])
+def delete_file(file_id):
+    """Delete a file, its thumbnail, and its database record"""
+    try:
+        file_type = request.args.get('type', 'answer')
+        
+        if file_type == 'question':
+            file_obj = QuestionPaper.query.get_or_404(file_id)
+        elif file_type == 'answer':
+            file_obj = AnswerSheet.query.get_or_404(file_id)
+        elif file_type == 'rubric':
+            file_obj = EvaluationRubric.query.get_or_404(file_id)
+        else:
+            return jsonify({'error': 'Invalid file type'}), 400
+        
+        # 1. Store paths before deleting record
+        file_path = file_obj.file_path
+        filename = os.path.basename(file_path)
+        thumb_path = os.path.join(Config.UPLOAD_FOLDER, 'thumbnails', f"thumb_{filename}.png")
+        
+        # 2. Delete database record
+        db.session.delete(file_obj)
+        db.session.commit()
+        
+        # 3. Delete physical files (try-except as they might already be gone)
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            if os.path.exists(thumb_path):
+                os.remove(thumb_path)
+        except Exception as e:
+            print(f"Warning: Physical file deletion failed: {e}")
+            
+        return jsonify({'message': 'File deleted successfully'}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500

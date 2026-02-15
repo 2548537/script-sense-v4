@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
-import { ZoomIn, ZoomOut, Maximize, Minimize } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize, Minimize, ChevronLeft, ChevronRight } from 'lucide-react';
 import { getFileUrl } from '../services/api';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
@@ -103,6 +103,30 @@ const PDFViewer = ({ answersheetId, currentPage, onPageSelect, onRegionSelect })
         }));
     };
 
+    const handleTouchStart = (e) => {
+        const touch = e.touches[0];
+        const rect = e.currentTarget.getBoundingClientRect();
+        setSelection({
+            start: { x: touch.clientX - rect.left, y: touch.clientY - rect.top },
+            end: null,
+            active: true
+        });
+    };
+
+    const handleTouchMove = (e) => {
+        if (!selection.active) return;
+        const touch = e.touches[0];
+        const rect = e.currentTarget.getBoundingClientRect();
+        setSelection(prev => ({
+            ...prev,
+            end: { x: touch.clientX - rect.left, y: touch.clientY - rect.top }
+        }));
+    };
+
+    const handleTouchEnd = (e) => {
+        handleMouseUp(e);
+    };
+
     const handleMouseUp = (e) => {
         if (selection.start && selection.end) {
             const container = e.currentTarget;
@@ -118,8 +142,8 @@ const PDFViewer = ({ answersheetId, currentPage, onPageSelect, onRegionSelect })
 
                 const startX = selection.start.x + offsetX;
                 const startY = selection.start.y + offsetY;
-                const endX = selection.end.x + offsetX;
-                const endY = selection.end.y + offsetY;
+                const endX = selection.end.x + (selection.end.x ? offsetX : 0);
+                const endY = selection.end.y + (selection.end.y ? offsetY : 0);
 
                 const x = Math.min(startX, endX);
                 const y = Math.min(startY, endY);
@@ -153,9 +177,12 @@ const PDFViewer = ({ answersheetId, currentPage, onPageSelect, onRegionSelect })
             top: `${y}px`,
             width: `${width}px`,
             height: `${height}px`,
-            border: '2px dashed #0ea5e9',
-            backgroundColor: 'rgba(14, 165, 233, 0.1)',
-            pointerEvents: 'none'
+            border: '2px solid #0ea5e9',
+            backgroundColor: 'rgba(14, 165, 233, 0.15)',
+            boxShadow: '0 0 15px rgba(14, 165, 233, 0.3)',
+            borderRadius: '4px',
+            pointerEvents: 'none',
+            zIndex: 20
         };
     };
 
@@ -194,34 +221,61 @@ const PDFViewer = ({ answersheetId, currentPage, onPageSelect, onRegionSelect })
             </div>
 
             {/* PDF Display */}
-            <div className="flex-1 overflow-auto p-4 flex justify-center" ref={containerRef}>
-                <div
-                    className="relative inline-block cursor-crosshair shadow-lg"
-                    onMouseDown={handleMouseDown}
-                    onMouseMove={handleMouseMove}
-                    onMouseUp={handleMouseUp}
-                    style={{ lineHeight: 0 }} // Remove unexpected spacing
-                >
-                    <Document
-                        file={pdfUrl}
-                        onLoadSuccess={onDocumentLoadSuccess}
-                        loading={<div className="spinner mx-auto"></div>}
-                        error={<div className="text-red-400 p-4">Failed to load PDF</div>}
+            <div className="flex-1 relative group overflow-hidden" ref={containerRef}>
+                {/* Floating Navigation */}
+                <div className="absolute inset-y-0 left-0 w-24 z-10 flex items-center justify-start pl-4 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                        onClick={() => currentPage > 0 && onPageSelect(currentPage - 1)}
+                        disabled={currentPage === 0}
+                        className={`p-3 rounded-full bg-black/50 text-white backdrop-blur-md border border-white/10 hover:bg-black/70 transition-all pointer-events-auto ${currentPage === 0 ? 'opacity-30 cursor-not-allowed' : ''}`}
+                        title="Previous Page"
                     >
-                        <Page
-                            pageNumber={currentPage + 1}
-                            scale={scale}
-                            onLoadSuccess={onPageLoadSuccess}
-                            renderTextLayer={false}
-                            renderAnnotationLayer={false}
-                            className="rounded-lg overflow-hidden"
-                            loading=""
-                        />
-                    </Document>
+                        <ChevronLeft className="w-8 h-8" />
+                    </button>
+                </div>
+                <div className="absolute inset-y-0 right-0 w-24 z-10 flex items-center justify-end pr-4 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                        onClick={() => currentPage < numPages - 1 && onPageSelect(currentPage + 1)}
+                        disabled={currentPage === numPages - 1}
+                        className={`p-3 rounded-full bg-black/50 text-white backdrop-blur-md border border-white/10 hover:bg-black/70 transition-all pointer-events-auto ${currentPage === numPages - 1 ? 'opacity-30 cursor-not-allowed' : ''}`}
+                        title="Next Page"
+                    >
+                        <ChevronRight className="w-8 h-8" />
+                    </button>
+                </div>
 
-                    {selection.start && selection.end && (
-                        <div style={getSelectionStyle()} />
-                    )}
+                <div className="h-full overflow-auto p-4 flex justify-center">
+                    <div
+                        className="relative inline-block cursor-crosshair shadow-2xl glass rounded-lg touch-none"
+                        onMouseDown={handleMouseDown}
+                        onMouseMove={handleMouseMove}
+                        onMouseUp={handleMouseUp}
+                        onTouchStart={handleTouchStart}
+                        onTouchMove={handleTouchMove}
+                        onTouchEnd={handleTouchEnd}
+                        style={{ lineHeight: 0 }} // Remove unexpected spacing
+                    >
+                        <Document
+                            file={pdfUrl}
+                            onLoadSuccess={onDocumentLoadSuccess}
+                            loading={<div className="spinner mx-auto"></div>}
+                            error={<div className="text-red-400 p-4">Failed to load PDF</div>}
+                        >
+                            <Page
+                                pageNumber={currentPage + 1}
+                                scale={scale}
+                                onLoadSuccess={onPageLoadSuccess}
+                                renderTextLayer={false}
+                                renderAnnotationLayer={false}
+                                className="rounded-lg"
+                                loading=""
+                            />
+                        </Document>
+
+                        {selection.start && selection.end && (
+                            <div style={getSelectionStyle()} />
+                        )}
+                    </div>
                 </div>
             </div>
 

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ChevronLeft, ChevronRight, Save, Eye, FileText } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Save, Eye, FileText, Sparkles } from 'lucide-react';
 import PDFViewer from '../components/PDFViewer';
 import TranscriptionPanel from '../components/TranscriptionPanel';
 import GradingPanel from '../components/GradingPanel';
 import DocumentModal from '../components/DocumentModal';
-import { getFiles, getPdfInfo } from '../services/api';
+import ZoomModal from '../components/ZoomModal';
+import { getFiles, getPdfInfo, zoomRegion } from '../services/api';
 
 const EvaluationPage = () => {
     const { answersheetId } = useParams();
@@ -20,6 +21,8 @@ const EvaluationPage = () => {
     const [showRubric, setShowRubric] = useState(false);
     const [questionPapers, setQuestionPapers] = useState([]);
     const [rubrics, setRubrics] = useState([]);
+    const [activeTab, setActiveTab] = useState('pdf'); // 'pdf', 'transcription', 'grading'
+    const [zoomImageUrl, setZoomImageUrl] = useState(null);
 
     useEffect(() => {
         loadAnswerSheet();
@@ -50,8 +53,16 @@ const EvaluationPage = () => {
         }
     };
 
-    const handleRegionSelect = (region) => {
+    const handleRegionSelect = async (region) => {
         setSelectedRegion(region);
+        try {
+            const result = await zoomRegion(answersheetId, currentPage, region);
+            if (result.success) {
+                setZoomImageUrl(result.image);
+            }
+        } catch (error) {
+            console.error('Zoom failed:', error);
+        }
     };
 
     const handlePageChange = (direction) => {
@@ -67,7 +78,7 @@ const EvaluationPage = () => {
     };
 
     return (
-        <div className="min-h-screen p-6">
+        <div className="min-h-screen p-4 md:p-6 flex flex-col">
             {/* Header */}
             <header className="mb-6 flex items-center justify-between">
                 <div className="flex items-center gap-4">
@@ -78,37 +89,58 @@ const EvaluationPage = () => {
                         <ArrowLeft className="w-5 h-5" />
                     </button>
                     <div>
-                        <h1 className="text-2xl font-bold gradient-text">
-                            Evaluating: {answerSheet?.student_name || 'Loading...'}
+                        <h1 className="text-xl md:text-2xl font-bold gradient-text truncate max-w-[200px] md:max-w-none">
+                            {answerSheet?.student_name || 'Loading...'}
                         </h1>
-                        <p className="text-gray-400">
+                        <p className="text-xs md:text-sm text-gray-400">
                             Page {currentPage + 1} of {totalPages}
                         </p>
                     </div>
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex gap-1 md:gap-2">
                     <button
                         onClick={() => handlePageChange('prev')}
                         disabled={currentPage === 0}
-                        className="btn btn-ghost p-3"
+                        className="btn btn-ghost p-2 md:p-3"
                     >
-                        <ChevronLeft className="w-5 h-5" />
+                        <ChevronLeft className="w-4 h-4 md:w-5 md:h-5" />
                     </button>
                     <button
                         onClick={() => handlePageChange('next')}
                         disabled={currentPage >= totalPages - 1}
-                        className="btn btn-ghost p-3"
+                        className="btn btn-ghost p-2 md:p-3"
                     >
-                        <ChevronRight className="w-5 h-5" />
+                        <ChevronRight className="w-4 h-4 md:w-5 md:h-5" />
                     </button>
                 </div>
             </header>
 
-            {/* Main Content - 3 Column Layout */}
-            <div className="grid grid-cols-12 gap-6 h-[calc(100vh-180px)]">
+            {/* Mobile Tab Switcher */}
+            <div className="flex lg:hidden glass mb-4 p-1">
+                {[
+                    { id: 'pdf', label: 'Script', icon: Eye },
+                    { id: 'transcription', label: 'AI Review', icon: Sparkles },
+                    { id: 'grading', label: 'Grading', icon: FileText }
+                ].map((tab) => (
+                    <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id)}
+                        className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === tab.id
+                            ? 'bg-primary-500 text-white shadow-lg'
+                            : 'text-gray-400 hover:text-white'
+                            }`}
+                    >
+                        <tab.icon className="w-4 h-4" />
+                        {tab.label}
+                    </button>
+                ))}
+            </div>
+
+            {/* Main Content - Responsive Layout */}
+            <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-6 min-h-0 overflow-hidden lg:h-[calc(100vh-180px)]">
                 {/* Left Panel - PDF Viewer */}
-                <div className="col-span-3">
+                <div className={`${activeTab === 'pdf' ? 'block' : 'hidden lg:block'} lg:col-span-3 h-full overflow-hidden`}>
                     <PDFViewer
                         answersheetId={answersheetId}
                         currentPage={currentPage}
@@ -118,7 +150,7 @@ const EvaluationPage = () => {
                 </div>
 
                 {/* Center Panel - Transcription */}
-                <div className="col-span-6">
+                <div className={`${activeTab === 'transcription' ? 'block' : 'hidden lg:block'} lg:col-span-6 h-full overflow-hidden`}>
                     <TranscriptionPanel
                         answersheetId={answersheetId}
                         page={currentPage}
@@ -128,7 +160,7 @@ const EvaluationPage = () => {
                 </div>
 
                 {/* Right Panel - Grading */}
-                <div className="col-span-3">
+                <div className={`${activeTab === 'grading' ? 'block' : 'hidden lg:block'} lg:col-span-3 h-full overflow-hidden`}>
                     <GradingPanel
                         answersheetId={answersheetId}
                         answerSheet={answerSheet}
@@ -154,6 +186,14 @@ const EvaluationPage = () => {
                     file={rubrics[0]}
                     onClose={() => setShowRubric(false)}
                     title="Evaluation Rubric"
+                />
+            )}
+
+            {/* Zoom Modal */}
+            {zoomImageUrl && (
+                <ZoomModal
+                    imageUrl={zoomImageUrl}
+                    onClose={() => setZoomImageUrl(null)}
                 />
             )}
         </div>

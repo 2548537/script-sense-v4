@@ -92,8 +92,8 @@ class PDFProcessor:
                 width = int(w_coord) if w_coord > 0 else full_image.width
                 height = int(h_coord) if h_coord > 0 else full_image.height
             
-            # --- ADDED 20px PADDING FOR BORDER SAFETY ---
-            padding = 20
+            # --- INCREASED PADDING FOR SAFETY ---
+            padding = 40
             x = max(0, x - padding)
             y = max(0, y - padding)
             width = width + (2 * padding)
