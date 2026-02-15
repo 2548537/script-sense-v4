@@ -71,7 +71,7 @@ const FileUploader = ({ onUpload, type, title }) => {
                 errorMessage = 'File too large for server limits.';
             }
 
-            const targetUrl = error.config?.url ? `\nTarget: ${error.config.url}` : '';
+            const targetUrl = error.config ? `\nTarget: ${error.config.baseURL + '/' + error.config.url}` : '';
             alert(`Upload failed: ${errorMessage}${targetUrl}\nStatus: ${status || 'N/A'}`);
         } finally {
             setUploading(false);

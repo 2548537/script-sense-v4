@@ -89,10 +89,14 @@ def upload_answer_sheet():
         # Save file
         filepath = os.path.join(Config.UPLOAD_FOLDER, 'answer_sheets', filename)
         file.save(filepath)
+        print(f"✅ Saved answer sheet to {filepath}")
         
-        # Generate thumbnail
+        # Generate thumbnail (non-critical)
         thumbnail_path = os.path.join(Config.UPLOAD_FOLDER, 'thumbnails', f"thumb_{filename}.png")
-        PDFProcessor.generate_thumbnail(filepath, thumbnail_path)
+        try:
+            PDFProcessor.generate_thumbnail(filepath, thumbnail_path)
+        except Exception as e:
+            print(f"⚠️ Answer sheet thumbnail generation skipped: {e}")
         
         # Create database entry
         final_qp_id = None
@@ -144,10 +148,14 @@ def upload_rubric():
         # Save file
         filepath = os.path.join(Config.UPLOAD_FOLDER, 'rubrics', filename)
         file.save(filepath)
+        print(f"✅ Saved rubric to {filepath}")
         
-        # Generate thumbnail
+        # Generate thumbnail (non-critical)
         thumbnail_path = os.path.join(Config.UPLOAD_FOLDER, 'thumbnails', f"thumb_{filename}.png")
-        PDFProcessor.generate_thumbnail(filepath, thumbnail_path)
+        try:
+            PDFProcessor.generate_thumbnail(filepath, thumbnail_path)
+        except Exception as e:
+            print(f"⚠️ Rubric thumbnail generation skipped: {e}")
         
         # Create database entry
         rubric = EvaluationRubric(
