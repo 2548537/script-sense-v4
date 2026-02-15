@@ -31,6 +31,19 @@ def create_app():
             'message': 'Backend is reachable and CORS is working!',
             'timestamp': datetime.utcnow().isoformat()
         }), 200
+
+    @app.after_request
+    def after_request(response):
+        """Manually inject CORS headers for extra robustness"""
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+        
+        # Explicitly handle preflight
+        if request.method == 'OPTIONS':
+            return response
+            
+        return response
     
     # Create database tables
     with app.app_context():

@@ -1,5 +1,5 @@
-import React, { useState, useCallback } from 'react';
-import { Upload, X, FileText, Globe, Zap } from 'lucide-react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { Upload, X, FileText, Globe, Zap, Terminal, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { uploadQuestionPaper, uploadAnswerSheet, uploadRubric, DIRECT_RENDER_URL } from '../services/api';
 import axios from 'axios';
 
@@ -13,17 +13,62 @@ const FileUploader = ({ type, onUploadSuccess, questionPaperId }) => {
     const [testing, setTesting] = useState(false);
     const [useDirectMode, setUseDirectMode] = useState(false);
 
+    // Debug Console State
+    const [debugLogs, setDebugLogs] = useState([]);
+    const [showDebug, setShowDebug] = useState(false);
+    const logsEndRef = useRef(null);
+
+    const addLog = (message, type = 'info') => {
+        const timestamp = new Date().toLocaleTimeString();
+        setDebugLogs(prev => [...prev.slice(-49), { timestamp, message, type }]);
+    };
+
+    useEffect(() => {
+        if (logsEndRef.current) {
+            logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, [debugLogs]);
+
+    // Create a dedicated Axios instance for Direct Mode that logs everything
+    const directAxios = axios.create({
+        baseURL: DIRECT_RENDER_URL,
+        timeout: 120000
+    });
+
+    directAxios.interceptors.request.use(config => {
+        addLog(`📡 Request: ${config.method?.toUpperCase()} ${config.url}`, 'info');
+        return config;
+    });
+
+    directAxios.interceptors.response.use(
+        response => {
+            addLog(`✅ Response: ${response.status} from ${response.config.url}`, 'success');
+            return response;
+        },
+        error => {
+            const errorDetail = error.response
+                ? `Status ${error.response.status}: ${JSON.stringify(error.response.data)}`
+                : error.message;
+            addLog(`❌ Error: ${errorDetail}`, 'error');
+            return Promise.reject(error);
+        }
+    );
+
     const testConnection = async () => {
         setTesting(true);
         const baseUrl = useDirectMode ? DIRECT_RENDER_URL : '/api/';
         const testUrl = `${baseUrl}test-connection`;
 
+        addLog(`🧪 Testing connection to: ${testUrl}`, 'info');
+
         try {
             const response = await axios.get(testUrl, { timeout: 10000 });
+            addLog(`✅ Connection Success: ${response.data.message}`, 'success');
             alert(`✅ Connection Success!\nTarget: ${testUrl}\nResponse: ${response.data.message}`);
         } catch (error) {
+            addLog(`❌ Connection Failed: ${error.message}`, 'error');
             console.error('Connection test failed:', error);
-            alert(`❌ Connection Failed!\nAttempted URL: ${testUrl}\nError: ${error.message}\n${error.response ? `Status: ${error.response.status}` : 'Check if the backend URL is correct in Vercel settings.'}`);
+            alert(`❌ Connection Failed!\nAttempted URL: ${testUrl}\nError: ${error.message}\n${error.response ? `Status: ${error.response.status}` : 'Check if the backend URL is correct.'}`);
         } finally {
             setTesting(false);
         }
@@ -47,6 +92,7 @@ const FileUploader = ({ type, onUploadSuccess, questionPaperId }) => {
         const files = e.dataTransfer.files;
         if (files && files[0] && (files[0].type === 'application/pdf' || files[0].name.toLowerCase().endsWith('.pdf'))) {
             setFile(files[0]);
+            addLog(`📎 File selected: ${files[0].name} (${(files[0].size / 1024 / 1024).toFixed(2)} MB)`, 'info');
         }
     }, []);
 
@@ -59,6 +105,7 @@ const FileUploader = ({ type, onUploadSuccess, questionPaperId }) => {
 
         if (isPdf) {
             setFile(selectedFile);
+            addLog(`📎 File selected: ${selectedFile.name} (${(selectedFile.size / 1024 / 1024).toFixed(2)} MB)`, 'info');
         } else {
             alert('Please select a valid PDF file.');
         }
@@ -68,14 +115,17 @@ const FileUploader = ({ type, onUploadSuccess, questionPaperId }) => {
         if (!file) return;
 
         setUploading(true);
+        addLog(`🚀 Starting upload (${useDirectMode ? 'Direct Mode' : 'Proxy Mode'})...`, 'info');
+
         try {
             let responseData;
             const onProgress = (progressEvent) => {
                 const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-                console.log(`📤 Upload Progress: ${percentCompleted}%`);
+                if (percentCompleted % 10 === 0) {
+                    addLog(`📤 Progress: ${percentCompleted}%`, 'info');
+                }
             };
 
-            // Use direct Axios call if in Direct Mode to bypass Vercel limits
             if (useDirectMode && DIRECT_RENDER_URL) {
                 const formData = new FormData();
                 formData.append('file', file);
@@ -94,13 +144,11 @@ const FileUploader = ({ type, onUploadSuccess, questionPaperId }) => {
                     endpoint = 'upload/rubric';
                 }
 
-                const response = await axios.post(`${DIRECT_RENDER_URL}${endpoint}`, formData, {
-                    onUploadProgress: onProgress,
-                    timeout: 120000
+                const response = await directAxios.post(endpoint, formData, {
+                    onUploadProgress: onProgress
                 });
                 responseData = response.data;
             } else {
-                // Use the standard service (Vercel Proxy)
                 if (type === 'question') {
                     responseData = await uploadQuestionPaper(file, title, totalQuestions, onProgress);
                 } else if (type === 'answer') {
@@ -110,6 +158,7 @@ const FileUploader = ({ type, onUploadSuccess, questionPaperId }) => {
                 }
             }
 
+            addLog(`✅ Upload complete!`, 'success');
             setFile(null);
             setTitle('');
             setStudentName('');
@@ -117,16 +166,14 @@ const FileUploader = ({ type, onUploadSuccess, questionPaperId }) => {
             alert('File uploaded successfully!');
             if (onUploadSuccess) onUploadSuccess(responseData);
         } catch (error) {
+            addLog(`❌ Upload failed: ${error.message}`, 'error');
             console.error('Upload failed:', error);
             const status = error.response?.status;
             let errorMessage = error.response?.data?.error || error.message || 'Unknown error';
 
             if (error.message === 'Network Error') {
                 const baseUrl = useDirectMode ? DIRECT_RENDER_URL : '/api/';
-                const isProduction = !useDirectMode && DIRECT_RENDER_URL;
-                errorMessage = isProduction
-                    ? `Network Error: Vercel might be blocking this large upload to ${baseUrl}. Try switching to "Direct Mode" below.`
-                    : `Network Error: The backend at ${baseUrl} is unreachable. Check your connection.`;
+                errorMessage = `Network Error (Blocked or Unreachable). Check Debug Logs.`;
             }
 
             const targetUrl = error.config ? `\nTarget: ${error.config.baseURL || ''}${error.config.url}` : '';
@@ -140,14 +187,24 @@ const FileUploader = ({ type, onUploadSuccess, questionPaperId }) => {
         setFile(null);
     };
 
+    const clearLogs = () => setDebugLogs([]);
+
     return (
-        <div className="glass p-6 rounded-xl">
-            <div className="flex justify-between items-center mb-4">
+        <div className="glass p-6 rounded-xl flex flex-col gap-4">
+            <div className="flex justify-between items-center">
                 <h3 className="text-xl font-semibold gradient-text">
                     {type === 'question' ? 'Question Paper' : type === 'answer' ? 'Answer Sheet' : 'Evaluation Rubric'}
                 </h3>
 
                 <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => setShowDebug(!showDebug)}
+                        className={`p-1.5 rounded-lg transition-all ${showDebug ? 'bg-indigo-500/20 text-indigo-400' : 'bg-white/5 text-gray-500'}`}
+                        title="Toggle Debug Console"
+                    >
+                        <Terminal size={18} />
+                    </button>
+
                     <button
                         onClick={testConnection}
                         disabled={testing}
@@ -160,10 +217,9 @@ const FileUploader = ({ type, onUploadSuccess, questionPaperId }) => {
                         <button
                             onClick={() => setUseDirectMode(!useDirectMode)}
                             className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-all ${useDirectMode
-                                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                                : 'bg-primary-500/10 text-primary-400 border border-primary-500/20'
+                                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                                    : 'bg-primary-500/10 text-primary-400 border border-primary-500/20'
                                 }`}
-                            title={useDirectMode ? "Talking directly to Render (Bypassing Vercel)" : "Talking to Vercel Proxy"}
                         >
                             {useDirectMode ? <Zap size={14} /> : <Globe size={14} />}
                             {useDirectMode ? 'Direct Mode ON' : 'Proxy Mode'}
@@ -171,6 +227,37 @@ const FileUploader = ({ type, onUploadSuccess, questionPaperId }) => {
                     )}
                 </div>
             </div>
+
+            {/* Debug Console Overlay */}
+            {showDebug && (
+                <div className="bg-black/80 rounded-lg p-3 font-mono text-[10px] border border-white/10 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="flex justify-between items-center mb-2 border-b border-white/10 pb-1">
+                        <span className="text-indigo-400 font-bold uppercase tracking-wider">Debug Console</span>
+                        <button onClick={clearLogs} className="text-gray-500 hover:text-red-400 transition-colors">
+                            <Trash2 size={12} />
+                        </button>
+                    </div>
+                    <div className="max-h-40 overflow-y-auto space-y-1 scrollbar-thin scrollbar-thumb-white/10">
+                        {debugLogs.length === 0 ? (
+                            <div className="text-gray-600 italic">No logs yet...</div>
+                        ) : (
+                            debugLogs.map((log, i) => (
+                                <div key={i} className="flex gap-2">
+                                    <span className="text-gray-600 shrink-0">[{log.timestamp}]</span>
+                                    <span className={
+                                        log.type === 'error' ? 'text-red-400' :
+                                            log.type === 'success' ? 'text-green-400' :
+                                                'text-gray-300'
+                                    }>
+                                        {log.message}
+                                    </span>
+                                </div>
+                            ))
+                        )}
+                        <div ref={logsEndRef} />
+                    </div>
+                </div>
+            )}
 
             <div
                 className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${isDragging ? 'drag-active border-primary-500 bg-primary-500/10' : 'border-white border-opacity-20'
@@ -209,7 +296,7 @@ const FileUploader = ({ type, onUploadSuccess, questionPaperId }) => {
             </div>
 
             {file && (
-                <div className="mt-4 space-y-3">
+                <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-200">
                     {type === 'question' && (
                         <>
                             <input
@@ -252,7 +339,7 @@ const FileUploader = ({ type, onUploadSuccess, questionPaperId }) => {
                     <button
                         onClick={handleUpload}
                         disabled={uploading}
-                        className="btn btn-primary w-full"
+                        className="btn btn-primary w-full shadow-lg shadow-primary-500/20"
                     >
                         {uploading ? 'Uploading...' : 'Upload'}
                     </button>
