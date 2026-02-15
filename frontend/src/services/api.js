@@ -4,7 +4,12 @@ const getApiBaseUrl = () => {
     // 1. Explicit API URL (Production/Deployment)
     let url = import.meta.env.VITE_API_URL || '';
 
-    if (!url) {
+    if (url) {
+        // Ensure it ends with /api if not already there
+        if (!url.toLowerCase().includes('/api')) {
+            url = url.endsWith('/') ? `${url}api` : `${url}/api`;
+        }
+    } else {
         const { hostname, protocol } = window.location;
 
         // 2. Localhost Development
@@ -21,7 +26,7 @@ const getApiBaseUrl = () => {
         }
     }
 
-    // Ensure trailing slash for Axios consistency
+    // Ensure trailing slash for Axios consistency with relative paths (e.g. 'upload/...')
     return url.endsWith('/') ? url : `${url}/`;
 };
 
