@@ -29,21 +29,15 @@ const FileUploader = ({ type, onUploadSuccess, questionPaperId }) => {
         }
     }, [debugLogs]);
 
-    // Dedicated Axios instance for Direct Mode (v2.8: Force XHR adapter and Headers)
+    // Dedicated Axios instance for Direct Mode (v2.10: NO manual Content-Type!)
     const directAxios = axios.create({
         baseURL: DIRECT_RENDER_URL,
         timeout: 120000,
-        // Force traditional XHR adapter as some mobile browsers' Fetch implementation 
-        // handles FormData/CORS preflights poorly
         adapter: 'xhr'
     });
 
     directAxios.interceptors.request.use(config => {
         addLog(`📡 Request: ${config.method?.toUpperCase()} ${config.url}`, 'info');
-        // Force correct multipart header for mobile
-        if (config.data instanceof FormData) {
-            addLog(`🛠 Enforcing multipart/form-data headers`, 'info');
-        }
         return config;
     });
 
@@ -55,11 +49,6 @@ const FileUploader = ({ type, onUploadSuccess, questionPaperId }) => {
         error => {
             const errorJson = error.toJSON ? JSON.stringify(error.toJSON()) : 'No JSON detail';
             addLog(`❌ Detailed Error: ${errorJson}`, 'error');
-
-            const errorDetail = error.response
-                ? `Status ${error.response.status}: ${JSON.stringify(error.response.data)}`
-                : error.message;
-            addLog(`❌ User Error: ${errorDetail}`, 'error');
             return Promise.reject(error);
         }
     );
@@ -70,36 +59,32 @@ const FileUploader = ({ type, onUploadSuccess, questionPaperId }) => {
         const testUrl = `${baseUrl}test-connection`;
 
         addLog(`🧪 Testing connection to: ${testUrl}`, 'info');
+        addLog(`🌍 Browser Context: ${window.location.href}`, 'info');
 
         try {
             const response = await axios.get(testUrl, {
                 timeout: 15000,
-                adapter: 'xhr' // Using XHR here too for consistency
+                adapter: 'xhr'
             });
 
-            // v2.8 Identity Check
+            // v2.10 Identity & Response Check
             const identityHeader = response.headers['x-scriptsense-server'];
-            const identityBody = response.data?.server_identity;
-            const isJson = typeof response.data === 'object';
+            const isJson = typeof response.data === 'object' && response.data !== null;
 
-            addLog(`📝 Response Type: ${typeof response.data}`, 'info');
-            addLog(`🆔 Identity Header: ${identityHeader}`, 'info');
+            addLog(`📝 Content-Type: ${response.headers['content-type']}`, 'info');
 
             if (!isJson) {
-                addLog(`⚠️ CRITICAL: Response is not JSON! You are likely hitting a website, not the API.`, 'error');
-                alert(`🛑 CRITICAL CONFIG ERROR!\nTarget: ${testUrl}\n\nProblem: The server returned a webpage instead of an API response.\n\nAction: Check your Render deployment settings. Ensure it is running the Python backend.`);
-            } else if (identityHeader !== 'scriptsense-python-backend' && identityBody !== 'scriptsense-python-backend') {
-                addLog(`⚠️ WARNING: Identity mismatch. Unknown backend.`, 'error');
-                alert(`⚠️ Backend Mismatch!\nResponse: ${JSON.stringify(response.data)}\nCheck if your RENDER_URL is correct.`);
+                addLog(`⚠️ CRITICAL: Response is NOT JSON! You hit HTML.`, 'error');
+                alert(`🛑 CRITICAL CONFIG ERROR!\nTarget: ${testUrl}\n\nProblem: Vercel is serving the Website instead of the API.\n\nMode: ${useDirectMode ? 'Direct Mode' : 'Proxy Mode'}`);
             } else {
-                addLog(`✅ Backend Verified: ${identityBody || 'scriptsense-python'}`, 'success');
-                alert(`✅ Backend Verified Successfully!\nMode: ${useDirectMode ? 'Direct' : 'Proxy'}\nReady for upload.`);
+                addLog(`✅ Backend Identified: ${response.data.server_identity || 'scriptsense-python'}`, 'success');
+                alert(`✅ Backend Verified Successfully!\nYou are connected to the Python server.`);
             }
         } catch (error) {
-            const errorJson = error.toJSON ? JSON.stringify(error.toJSON()) : 'No JSON detail';
-            addLog(`❌ Connection Failed JSON: ${errorJson}`, 'error');
+            const errorJson = error.toJSON ? JSON.stringify(error.toJSON()) : 'No detail';
             addLog(`❌ Connection Failed: ${error.message}`, 'error');
-            alert(`❌ Connection Failed!\nError: ${error.message}\nCheck logs for details.`);
+            addLog(`❌ Error Detail: ${errorJson}`, 'error');
+            alert(`❌ Connection Failed!\nCheck Debug Logs for specific internal error.`);
         } finally {
             setTesting(false);
         }
@@ -123,20 +108,16 @@ const FileUploader = ({ type, onUploadSuccess, questionPaperId }) => {
         const files = e.dataTransfer.files;
         if (files && files[0] && (files[0].type === 'application/pdf' || files[0].name.toLowerCase().endsWith('.pdf'))) {
             setFile(files[0]);
-            addLog(`📎 File selected: ${files[0].name} (${(files[0].size / 1024 / 1024).toFixed(2)} MB)`, 'info');
+            addLog(`📎 File selected: ${files[0].name}`, 'info');
         }
     }, []);
 
     const handleFileSelect = (e) => {
         const selectedFile = e.target.files[0];
         if (!selectedFile) return;
-
-        const isPdf = selectedFile.type === 'application/pdf' ||
-            selectedFile.name.toLowerCase().endsWith('.pdf');
-
-        if (isPdf) {
+        if (selectedFile.type === 'application/pdf' || selectedFile.name.toLowerCase().endsWith('.pdf')) {
             setFile(selectedFile);
-            addLog(`📎 File selected: ${selectedFile.name} (${(selectedFile.size / 1024 / 1024).toFixed(2)} MB)`, 'info');
+            addLog(`📎 File selected: ${selectedFile.name}`, 'info');
         } else {
             alert('Please select a valid PDF file.');
         }
@@ -146,44 +127,39 @@ const FileUploader = ({ type, onUploadSuccess, questionPaperId }) => {
         if (!file) return;
 
         setUploading(true);
-        addLog(`🚀 Starting upload (${useDirectMode ? 'Direct Mode' : 'Proxy Mode'})...`, 'info');
+        addLog(`🚀 Starting upload (${useDirectMode ? 'Direct' : 'Proxy'} Mode)...`, 'info');
 
         try {
             let responseData;
             const onProgress = (progressEvent) => {
                 const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-                if (percentCompleted % 10 === 0) {
-                    addLog(`📤 Progress: ${percentCompleted}%`, 'info');
-                }
+                if (percentCompleted % 20 === 0) addLog(`📤 Progress: ${percentCompleted}%`);
             };
 
             if (useDirectMode && DIRECT_RENDER_URL) {
                 const formData = new FormData();
                 formData.append('file', file);
 
-                let endpoint = '';
                 if (type === 'question') {
                     formData.append('title', title);
                     formData.append('total_questions', totalQuestions);
-                    endpoint = 'upload/question-paper';
                 } else if (type === 'answer') {
                     formData.append('student_name', studentName);
                     if (questionPaperId) formData.append('question_paper_id', questionPaperId);
-                    endpoint = 'upload/answer-sheet';
                 } else if (type === 'rubric') {
                     formData.append('title', title);
-                    endpoint = 'upload/rubric';
                 }
 
-                // v2.8: Use the customized directAxios
-                const response = await directAxios.post(endpoint, formData, {
-                    onUploadProgress: onProgress,
-                    headers: {
-                        'Content-Type': 'multipart/form-data'
-                    }
-                });
+                // v2.10: DO NOT set headers. Let browser add multipart/form-data with boundary!
+                const response = await directAxios.post(
+                    type === 'question' ? 'upload/question-paper' :
+                        type === 'answer' ? 'upload/answer-sheet' : 'upload/rubric',
+                    formData,
+                    { onUploadProgress: onProgress }
+                );
                 responseData = response.data;
             } else {
+                // Standard proxy service
                 if (type === 'question') {
                     responseData = await uploadQuestionPaper(file, title, totalQuestions, onProgress);
                 } else if (type === 'answer') {
@@ -202,27 +178,15 @@ const FileUploader = ({ type, onUploadSuccess, questionPaperId }) => {
             if (onUploadSuccess) onUploadSuccess(responseData);
         } catch (error) {
             const errorJson = error.toJSON ? JSON.stringify(error.toJSON()) : 'No detail';
-            addLog(`❌ Deep Upload Failure: ${errorJson}`, 'error');
-
-            console.error('Upload failed:', error);
-            const status = error.response?.status;
-            let errorMessage = error.response?.data?.error || error.message || 'Unknown error';
-
-            if (error.message === 'Network Error') {
-                errorMessage = `Network Error. Check logs for browser error codes.`;
-            }
-
-            const targetUrl = error.config ? `\nTarget: ${error.config.baseURL || ''}${error.config.url}` : '';
-            alert(`Upload failed: ${errorMessage}${targetUrl}\nStatus: ${status || 'N/A'}`);
+            addLog(`❌ Upload Failure: ${error.message}`, 'error');
+            addLog(`❌ Full Debug JSON: ${errorJson}`, 'error');
+            alert(`Upload failed: ${error.message}\nCheck logs for details.`);
         } finally {
             setUploading(false);
         }
     };
 
-    const removeFile = () => {
-        setFile(null);
-    };
-
+    const removeFile = () => setFile(null);
     const clearLogs = () => setDebugLogs([]);
 
     return (
@@ -236,7 +200,6 @@ const FileUploader = ({ type, onUploadSuccess, questionPaperId }) => {
                     <button
                         onClick={() => setShowDebug(!showDebug)}
                         className={`p-1.5 rounded-lg transition-all ${showDebug ? 'bg-indigo-500/20 text-indigo-400' : 'bg-white/5 text-gray-500'}`}
-                        title="Toggle Debug Console"
                     >
                         <Terminal size={18} />
                     </button>
@@ -244,7 +207,7 @@ const FileUploader = ({ type, onUploadSuccess, questionPaperId }) => {
                     <button
                         onClick={testConnection}
                         disabled={testing}
-                        className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold bg-white/5 hover:bg-white/10 border border-white/10 text-gray-400 transition-all"
+                        className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold bg-white/5 hover:bg-white/10 border border-white/10 text-gray-400"
                     >
                         {testing ? 'Verifying...' : 'Test Connection'}
                     </button>
@@ -252,9 +215,7 @@ const FileUploader = ({ type, onUploadSuccess, questionPaperId }) => {
                     {DIRECT_RENDER_URL && (
                         <button
                             onClick={() => setUseDirectMode(!useDirectMode)}
-                            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-all ${useDirectMode
-                                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                                    : 'bg-primary-500/10 text-primary-400 border border-primary-500/20'
+                            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-all ${useDirectMode ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-primary-500/10 text-primary-400 border border-primary-500/20'
                                 }`}
                         >
                             {useDirectMode ? <Zap size={14} /> : <Globe size={14} />}
@@ -264,67 +225,45 @@ const FileUploader = ({ type, onUploadSuccess, questionPaperId }) => {
                 </div>
             </div>
 
-            {/* Debug Console Overlay */}
             {showDebug && (
-                <div className="bg-black/80 rounded-lg p-3 font-mono text-[10px] border border-white/10 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="bg-black/80 rounded-lg p-3 font-mono text-[10px] border border-white/10 animate-in fade-in slide-in-from-top-2">
                     <div className="flex justify-between items-center mb-2 border-b border-white/10 pb-1">
-                        <span className="text-indigo-400 font-bold uppercase tracking-wider">Debug Console v2.8</span>
-                        <button onClick={clearLogs} className="text-gray-500 hover:text-red-400 transition-colors">
+                        <span className="text-indigo-400 font-bold uppercase">Debug Console v2.10</span>
+                        <button onClick={clearLogs} className="text-gray-500 hover:text-red-400">
                             <Trash2 size={12} />
                         </button>
                     </div>
-                    <div className="max-h-40 overflow-y-auto space-y-1 scrollbar-thin scrollbar-thumb-white/10">
-                        {debugLogs.length === 0 ? (
-                            <div className="text-gray-600 italic">No logs yet...</div>
-                        ) : (
+                    <div className="max-h-40 overflow-y-auto space-y-1">
+                        {debugLogs.length === 0 ? <div className="text-gray-600">No logs...</div> :
                             debugLogs.map((log, i) => (
                                 <div key={i} className="flex gap-2">
-                                    <span className="text-gray-600 shrink-0">[{log.timestamp}]</span>
-                                    <span className={
-                                        log.type === 'error' ? 'text-red-400' :
-                                            log.type === 'success' ? 'text-green-400' :
-                                                'text-gray-300'
-                                    } style={{ wordBreak: 'break-all' }}>
+                                    <span className="text-gray-600">[{log.timestamp}]</span>
+                                    <span className={log.type === 'error' ? 'text-red-400' : log.type === 'success' ? 'text-green-400' : 'text-gray-300'} style={{ wordBreak: 'break-all' }}>
                                         {log.message}
                                     </span>
                                 </div>
                             ))
-                        )}
+                        }
                         <div ref={logsEndRef} />
                     </div>
                 </div>
             )}
 
             <div
-                className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${isDragging ? 'drag-active border-primary-500 bg-primary-500/10' : 'border-white border-opacity-20'
-                    }`}
-                onDragEnter={handleDrag}
-                onDragLeave={handleDrag}
-                onDragOver={handleDrag}
-                onDrop={handleDrop}
+                className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${isDragging ? 'border-primary-500 bg-primary-500/10' : 'border-white border-opacity-20'}`}
+                onDragEnter={handleDrag} onDragLeave={handleDrag} onDragOver={handleDrag} onDrop={handleDrop}
             >
-                <input
-                    type="file"
-                    accept=".pdf"
-                    onChange={handleFileSelect}
-                    className="hidden"
-                    id={`file-input-${type}`}
-                />
-
+                <input type="file" accept=".pdf" onChange={handleFileSelect} className="hidden" id={`file-input-${type}`} />
                 {!file ? (
                     <label htmlFor={`file-input-${type}`} className="cursor-pointer">
                         <Upload className="w-12 h-12 mx-auto mb-4 text-primary-400" />
                         <p className="text-lg mb-2">Drop PDF here or click to browse</p>
-                        <p className="text-sm text-gray-400">Only PDF files are accepted</p>
                     </label>
                 ) : (
                     <div className="flex items-center justify-center gap-4">
                         <FileText className="w-8 h-8 text-primary-400" />
                         <span className="flex-1 text-left line-clamp-1">{file.name}</span>
-                        <button
-                            onClick={removeFile}
-                            className="p-2 hover:bg-red-500 hover:bg-opacity-20 rounded-lg"
-                        >
+                        <button onClick={removeFile} className="p-2 hover:bg-red-500/20 rounded-lg">
                             <X className="w-5 h-5" />
                         </button>
                     </div>
@@ -332,59 +271,24 @@ const FileUploader = ({ type, onUploadSuccess, questionPaperId }) => {
             </div>
 
             {file && (
-                <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                <div className="space-y-3">
                     {type === 'question' && (
                         <>
-                            <input
-                                type="text"
-                                placeholder="Question Paper Title"
-                                value={title}
-                                onChange={(e) => setTitle(e.target.value)}
-                                className="w-full px-4 py-2 bg-white bg-opacity-10 rounded-lg border border-white border-opacity-20 focus:border-primary-500 outline-none"
-                            />
-                            <input
-                                type="number"
-                                placeholder="Total Questions"
-                                value={totalQuestions}
-                                onChange={(e) => setTotalQuestions(parseInt(e.target.value, 10) || 1)}
-                                className="w-full px-4 py-2 bg-white bg-opacity-10 rounded-lg border border-white border-opacity-20 focus:border-primary-500 outline-none"
-                            />
+                            <input type="text" placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)}
+                                className="w-full px-4 py-2 bg-white/10 rounded-lg border border-white/20 outline-none" />
+                            <input type="number" placeholder="Questions" value={totalQuestions} onChange={(e) => setTotalQuestions(parseInt(e.target.value) || 1)}
+                                className="w-full px-4 py-2 bg-white/10 rounded-lg border border-white/20 outline-none" />
                         </>
                     )}
+                    {type === 'answer' && <input type="text" placeholder="Student Name" value={studentName} onChange={(e) => setStudentName(e.target.value)}
+                        className="w-full px-4 py-2 bg-white/10 rounded-lg border border-white/20 outline-none" />}
+                    {type === 'rubric' && <input type="text" placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)}
+                        className="w-full px-4 py-2 bg-white/10 rounded-lg border border-white/20 outline-none" />}
 
-                    {type === 'answer' && (
-                        <input
-                            type="text"
-                            placeholder="Student Name"
-                            value={studentName}
-                            onChange={(e) => setStudentName(e.target.value)}
-                            className="w-full px-4 py-2 bg-white bg-opacity-10 rounded-lg border border-white border-opacity-20 focus:border-primary-500 outline-none"
-                        />
-                    )}
-
-                    {type === 'rubric' && (
-                        <input
-                            type="text"
-                            placeholder="Rubric Title"
-                            value={title}
-                            onChange={(e) => setTitle(e.target.value)}
-                            className="w-full px-4 py-2 bg-white bg-opacity-10 rounded-lg border border-white border-opacity-20 focus:border-primary-500 outline-none"
-                        />
-                    )}
-
-                    <button
-                        onClick={handleUpload}
-                        disabled={uploading}
-                        className="btn btn-primary w-full shadow-lg shadow-primary-500/20"
-                    >
+                    <button onClick={handleUpload} disabled={uploading} className="btn btn-primary w-full shadow-lg shadow-primary-500/20">
                         {uploading ? 'Uploading...' : 'Upload'}
                     </button>
-
-                    {useDirectMode && (
-                        <p className="text-[10px] text-amber-400 text-center animate-pulse">
-                            ⚠️ Direct Mode bypasses Vercel limits. Recommended for large files.
-                        </p>
-                    )}
+                    {useDirectMode && <p className="text-[10px] text-amber-400 text-center animate-pulse">⚠️ Direct Mode: No Vercel limits.</p>}
                 </div>
             )}
         </div>
