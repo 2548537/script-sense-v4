@@ -34,8 +34,16 @@ const FileUploader = ({ onUpload, type, title }) => {
 
     const handleFileSelect = (e) => {
         const selectedFile = e.target.files[0];
-        if (selectedFile && selectedFile.type === 'application/pdf') {
+        if (!selectedFile) return;
+
+        // Relaxed validation: Check MIME type OR file extension
+        const isPdf = selectedFile.type === 'application/pdf' ||
+            selectedFile.name.toLowerCase().endsWith('.pdf');
+
+        if (isPdf) {
             setFile(selectedFile);
+        } else {
+            alert('Please select a valid PDF file.');
         }
     };
 
@@ -47,8 +55,11 @@ const FileUploader = ({ onUpload, type, title }) => {
             await onUpload(file, metadata);
             setFile(null);
             setMetadata({ title: '', studentName: '', totalQuestions: '' });
+            alert('File uploaded successfully!');
         } catch (error) {
             console.error('Upload failed:', error);
+            const errorMessage = error.response?.data?.error || error.message || 'Unknown error';
+            alert(`Upload failed: ${errorMessage}`);
         } finally {
             setUploading(false);
         }

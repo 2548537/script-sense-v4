@@ -117,7 +117,7 @@ def upload_answer_sheet():
         
     except Exception as e:
         db.session.rollback()
-        print(f"Upload Error: {str(e)}")
+        print(f"❌ Answer Sheet Upload Error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @upload_bp.route('/rubric', methods=['POST'])

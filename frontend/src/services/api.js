@@ -27,6 +27,21 @@ const api = axios.create({
     },
 });
 
+// Add error logging interceptor
+api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        console.error('🌐 API Error:', {
+            url: error.config?.url,
+            method: error.config?.method,
+            status: error.response?.status,
+            data: error.response?.data,
+            message: error.message
+        });
+        return Promise.reject(error);
+    }
+);
+
 // Upload services
 export const uploadQuestionPaper = async (file, title, totalQuestions) => {
     const formData = new FormData();
