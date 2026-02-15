@@ -6,6 +6,10 @@ const getApiBaseUrl = () => {
     return '/api/';
 };
 
+export const DIRECT_RENDER_URL = import.meta.env.VITE_API_URL
+    ? (import.meta.env.VITE_API_URL.endsWith('/') ? import.meta.env.VITE_API_URL : `${import.meta.env.VITE_API_URL}/`)
+    : null;
+
 const API_BASE_URL = getApiBaseUrl();
 
 console.log("🚀 ScriptSense Final API URL:", API_BASE_URL);
