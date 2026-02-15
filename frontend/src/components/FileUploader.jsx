@@ -66,7 +66,10 @@ const FileUploader = ({ onUpload, type, title }) => {
 
             // Add helpful context for mobile/network errors
             if (error.message === 'Network Error') {
-                errorMessage = 'Network Error: The backend might be unreachable. Check if you are on the same WiFi/Hotspot.';
+                const isProduction = error.config?.baseURL?.includes('render.com');
+                errorMessage = isProduction
+                    ? 'Network Error: The Render backend might be sleeping or unreachable. Please wait a moment and try again.'
+                    : 'Network Error: The backend might be unreachable. Check if you are on the same WiFi/Hotspot.';
             } else if (status === 413) {
                 errorMessage = 'File too large for server limits.';
             }

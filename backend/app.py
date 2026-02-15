@@ -15,13 +15,8 @@ def create_app():
     
     # Initialize extensions
     db.init_app(app)
-    # Broaden CORS for easier multi-device testing
-    CORS(app, resources={r"/api/*": {
-        "origins": "*",
-        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
-        "supports_credentials": False
-    }})
+    # Completely open CORS for production testing
+    CORS(app)
     
     # Register blueprints
     app.register_blueprint(upload_bp, url_prefix='/api/upload')

@@ -33,7 +33,7 @@ console.log("📡 Production API defined:", !!import.meta.env.VITE_API_URL);
 
 const api = axios.create({
     baseURL: API_BASE_URL,
-    // REMOVED default Content-Type: application/json as it can interfere with multipart/form-data
+    timeout: 120000, // 2 minutes timeout for slow mobile uploads
 });
 
 // Add error logging interceptor
