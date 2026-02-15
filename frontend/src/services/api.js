@@ -1,19 +1,24 @@
 import axios from 'axios';
 
 const getApiBaseUrl = () => {
-    // 1. Check if an explicit API URL is provided (Vercel/Production)
+    // 1. Explicit API URL (Production/Deployment)
     if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
 
-    // 2. Handle Local / Network access
-    const { hostname, protocol } = window.location;
+    const { hostname, protocol, port } = window.location;
 
-    // If we are on a local machine or network IP, use port 5000 on the same machine
-    if (hostname === 'localhost' || hostname.match(/^127\.|^192\.|^172\.|^10\./)) {
+    // 2. Localhost Development
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        return '/api'; // Use Vite proxy
+    }
+
+    // 3. Network Access (Mobile) - Use direct backend IP if possible
+    // This bypasses the Vite proxy which can sometimes be unstable for large uploads on mobile
+    if (hostname.match(/^10\.|^192\.|^172\./)) {
         return `${protocol}//${hostname}:5000/api`;
     }
 
-    // 3. Fallback to localhost if no other cues are available
-    return 'http://localhost:5000/api';
+    // 4. Default Fallback
+    return '/api';
 };
 
 const API_BASE_URL = getApiBaseUrl();
@@ -41,32 +46,38 @@ api.interceptors.response.use(
 );
 
 // Upload services
-export const uploadQuestionPaper = async (file, title, totalQuestions) => {
+export const uploadQuestionPaper = async (file, title, totalQuestions, onProgress) => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('title', title);
     formData.append('total_questions', totalQuestions);
 
-    const response = await api.post('/upload/question-paper', formData);
+    const response = await api.post('/upload/question-paper', formData, {
+        onUploadProgress: onProgress
+    });
     return response.data;
 };
 
-export const uploadAnswerSheet = async (file, studentName, questionPaperId) => {
+export const uploadAnswerSheet = async (file, studentName, questionPaperId, onProgress) => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('student_name', studentName);
     if (questionPaperId) formData.append('question_paper_id', questionPaperId);
 
-    const response = await api.post('/upload/answer-sheet', formData);
+    const response = await api.post('/upload/answer-sheet', formData, {
+        onUploadProgress: onProgress
+    });
     return response.data;
 };
 
-export const uploadRubric = async (file, title) => {
+export const uploadRubric = async (file, title, onProgress) => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('title', title);
 
-    const response = await api.post('/upload/rubric', formData);
+    const response = await api.post('/upload/rubric', formData, {
+        onUploadProgress: onProgress
+    });
     return response.data;
 };
 

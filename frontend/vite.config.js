@@ -8,6 +8,7 @@ export default defineConfig({
     },
     server: {
         port: 5173,
+        host: true, // Enable listening on all addresses (for mobile access)
         proxy: {
             '/api': {
                 target: 'http://localhost:5000',

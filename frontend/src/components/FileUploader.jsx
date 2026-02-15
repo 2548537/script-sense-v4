@@ -52,15 +52,27 @@ const FileUploader = ({ onUpload, type, title }) => {
 
         setUploading(true);
         try {
-            await onUpload(file, metadata);
+            await onUpload(file, metadata, (progressEvent) => {
+                const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                console.log(`📤 Upload Progress: ${percentCompleted}%`);
+            });
             setFile(null);
             setMetadata({ title: '', studentName: '', totalQuestions: '' });
             alert('File uploaded successfully!');
         } catch (error) {
             console.error('Upload failed:', error);
-            const errorMessage = error.response?.data?.error || error.message || 'Unknown error';
+            const status = error.response?.status;
+            let errorMessage = error.response?.data?.error || error.message || 'Unknown error';
+
+            // Add helpful context for mobile/network errors
+            if (error.message === 'Network Error') {
+                errorMessage = 'Network Error: The backend might be unreachable. Check if you are on the same WiFi/Hotspot.';
+            } else if (status === 413) {
+                errorMessage = 'File too large for server limits.';
+            }
+
             const targetUrl = error.config?.url ? `\nTarget: ${error.config.url}` : '';
-            alert(`Upload failed: ${errorMessage}${targetUrl}`);
+            alert(`Upload failed: ${errorMessage}${targetUrl}\nStatus: ${status || 'N/A'}`);
         } finally {
             setUploading(false);
         }

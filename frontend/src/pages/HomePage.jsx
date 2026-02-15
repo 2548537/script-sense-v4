@@ -26,18 +26,18 @@ const HomePage = () => {
         loadFiles();
     }, [filter]);
 
-    const handleUploadQuestionPaper = async (file, metadata) => {
-        await uploadQuestionPaper(file, metadata.title, metadata.totalQuestions);
+    const handleUploadQuestionPaper = async (file, metadata, onProgress) => {
+        await uploadQuestionPaper(file, metadata.title, metadata.totalQuestions, onProgress);
         loadFiles();
     };
 
-    const handleUploadAnswerSheet = async (file, metadata) => {
-        await uploadAnswerSheet(file, metadata.studentName);
+    const handleUploadAnswerSheet = async (file, metadata, onProgress) => {
+        await uploadAnswerSheet(file, metadata.studentName, null, onProgress);
         loadFiles();
     };
 
-    const handleUploadRubric = async (file, metadata) => {
-        await uploadRubric(file, metadata.title);
+    const handleUploadRubric = async (file, metadata, onProgress) => {
+        await uploadRubric(file, metadata.title, onProgress);
         loadFiles();
     };
 
