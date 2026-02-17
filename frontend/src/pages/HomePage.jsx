@@ -1,45 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { GraduationCap, RefreshCw } from 'lucide-react';
-import FileUploader from '../components/FileUploader';
-import FileGrid from '../components/FileGrid';
-import { uploadQuestionPaper, uploadAnswerSheet, uploadRubric, getFiles } from '../services/api';
+import { useNavigate } from 'react-router-dom';
+import { GraduationCap, Folder } from 'lucide-react';
 
 const HomePage = () => {
-    const [files, setFiles] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [filter, setFilter] = useState('all');
-
-    const loadFiles = async () => {
-        try {
-            setLoading(true);
-            const data = await getFiles(filter);
-            setFiles(data.files || []);
-        } catch (error) {
-            console.error('Failed to load files:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        loadFiles();
-    }, [filter]);
-
-    const handleUploadQuestionPaper = async (file, metadata, onProgress) => {
-        await uploadQuestionPaper(file, metadata.title, metadata.totalQuestions, onProgress);
-        loadFiles();
-    };
-
-    const handleUploadAnswerSheet = async (file, metadata, onProgress) => {
-        await uploadAnswerSheet(file, metadata.studentName, null, onProgress);
-        loadFiles();
-    };
-
-    const handleUploadRubric = async (file, metadata, onProgress) => {
-        await uploadRubric(file, metadata.title, onProgress);
-        loadFiles();
-    };
+    const navigate = useNavigate();
 
     return (
         <div className="min-h-screen p-4 md:p-8">
@@ -51,84 +15,32 @@ const HomePage = () => {
                     </div>
                     <div>
                         <h1 className="text-3xl md:text-4xl font-bold gradient-text flex items-center gap-2">
-                            ScriptSense
-                            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-primary-500/20 text-primary-400 border border-primary-500/30">v2.10</span>
+                            ScriptSense v3
                         </h1>
                         <p className="text-gray-400 text-base md:text-lg">AI-Powered Handwriting Recognition & Grading</p>
                     </div>
                 </div>
 
-                <Link to="/results" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white bg-opacity-10 hover:bg-opacity-20 transition-all border border-white border-opacity-10 text-sm md:text-base">
-                    <span className="font-semibold">View Results Library</span>
-                </Link>
             </header>
 
-            {/* Upload Section */}
-            <section className="mb-12">
-                <h2 className="text-2xl font-semibold mb-6 flex items-center gap-3">
-                    <span className="gradient-text">Upload Documents</span>
-                </h2>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <FileUploader
-                        type="question"
-                        title="Question Papers"
-                        onUpload={handleUploadQuestionPaper}
-                    />
-                    <FileUploader
-                        type="answer"
-                        title="Answer Sheets"
-                        onUpload={handleUploadAnswerSheet}
-                    />
-                    <FileUploader
-                        type="rubric"
-                        title="Evaluation Rubrics"
-                        onUpload={handleUploadRubric}
-                    />
-                </div>
-            </section>
-
-            {/* Files Section */}
-            <section>
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-6 gap-4">
-                    <h2 className="text-2xl font-semibold gradient-text">Uploaded Files</h2>
-
-                    <div className="flex items-center gap-3 overflow-x-auto lg:overflow-visible pb-2 md:pb-0 no-scrollbar">
-                        {/* Filter - Segmented Control Style */}
-                        <div className="flex bg-white/5 p-1 rounded-xl backdrop-blur-md border border-white/10 shrink-0">
-                            {['all', 'question', 'answer', 'rubric'].map(f => (
-                                <button
-                                    key={f}
-                                    onClick={() => setFilter(f)}
-                                    className={`px-4 md:px-6 py-2 rounded-lg text-sm md:text-base font-semibold transition-all duration-300 ${filter === f
-                                        ? 'bg-primary-500 text-white shadow-lg'
-                                        : 'text-gray-400 hover:text-white hover:bg-white/5'
-                                        }`}
-                                >
-                                    {f.charAt(0).toUpperCase() + f.slice(1)}
-                                </button>
-                            ))}
-                        </div>
-
-                        {/* Refresh */}
-                        <button
-                            onClick={loadFiles}
-                            className="p-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all shadow-lg shrink-0"
-                            disabled={loading}
-                        >
-                            <RefreshCw className={`w-5 h-5 text-gray-400 ${loading ? 'animate-spin' : ''}`} />
-                        </button>
+            {/* Main Action Hub */}
+            <main className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl">
+                <div onClick={() => navigate('/subjects')} className="group p-8 rounded-3xl bg-white/5 border border-white/10 hover:border-blue-500/50 transition-all cursor-pointer hover:bg-white/10">
+                    <div className="p-4 bg-blue-500/10 rounded-2xl w-fit mb-6 group-hover:bg-blue-500/20 transition-colors">
+                        <Folder className="w-8 h-8 text-blue-400" />
                     </div>
+                    <h2 className="text-2xl font-bold text-white mb-2">Subject Folder Dashboard</h2>
+                    <p className="text-gray-400">Manage your classes, subjects, and all evaluation documents in one place.</p>
                 </div>
 
-                {loading ? (
-                    <div className="flex justify-center items-center h-64">
-                        <div className="spinner"></div>
+                <div onClick={() => navigate('/results')} className="group p-8 rounded-3xl bg-white/5 border border-white/10 hover:border-green-500/50 transition-all cursor-pointer hover:bg-white/10">
+                    <div className="p-4 bg-green-500/10 rounded-2xl w-fit mb-6 group-hover:bg-green-500/20 transition-colors">
+                        <GraduationCap className="w-8 h-8 text-green-400" />
                     </div>
-                ) : (
-                    <FileGrid files={files} onRefresh={loadFiles} />
-                )}
-            </section>
+                    <h2 className="text-2xl font-bold text-white mb-2">Results Library</h2>
+                    <p className="text-gray-400">View scores, track student progress, and export marks cards for each subject.</p>
+                </div>
+            </main>
         </div>
     );
 };

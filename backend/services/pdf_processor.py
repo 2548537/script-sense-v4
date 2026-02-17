@@ -47,6 +47,19 @@ class PDFProcessor:
             # Convert to PIL Image
             img_data = pix.tobytes("png")
             image = Image.open(io.BytesIO(img_data))
+
+            # Auto-rotate to portrait if needed (fail-safe)
+            try:
+                if image.width > image.height:
+                    print(f"🔄 Auto-rotating page {page_number} to portrait...")
+                    # Handle different Pillow versions
+                    if hasattr(Image, 'Transpose'):
+                        rotation = Image.Transpose.ROTATE_270
+                    else:
+                        rotation = Image.ROTATE_270
+                    image = image.transpose(rotation)
+            except Exception as rot_e:
+                print(f"⚠️ Rotation failed but continuing: {rot_e}")
             
             doc.close()
             return image

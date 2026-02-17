@@ -16,6 +16,19 @@ def create_app():
     
     # Initialize extensions
     db.init_app(app)
+    
+    # Global Error Handler for Logging
+    @app.errorhandler(Exception)
+    def handle_exception(e):
+        import traceback
+        import time
+        timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+        error_msg = f"[{timestamp}] ERROR: {str(e)}\n{traceback.format_exc()}\n"
+        print(error_msg)
+        with open('error_log.txt', 'a', encoding='utf-8') as f:
+            f.write(error_msg + "-"*50 + "\n")
+        return jsonify(error=str(e)), 500
+
     # Standard robust CORS for production
     CORS(app, supports_credentials=True, resources={
         r"/api/*": {
@@ -32,10 +45,10 @@ def create_app():
             'status': 'connected',
             'message': 'Backend is reachable and CORS is working!',
             'timestamp': datetime.utcnow().isoformat(),
-            'server_identity': 'scriptsense-python-backend'
+            'server_identity': 'scriptsense-v3-backend'
         })
         # Add custom identity header for frontend verification
-        response.headers['X-ScriptSense-Server'] = 'scriptsense-python-backend'
+        response.headers['X-ScriptSense-Server'] = 'scriptsense-v3-backend'
         return response, 200
 
     @app.route('/api/preflight', methods=['OPTIONS'])
@@ -46,6 +59,10 @@ def create_app():
     # Register blueprints
     app.register_blueprint(upload_bp, url_prefix='/api/upload')
     app.register_blueprint(evaluation_bp, url_prefix='/api/evaluate')
+    
+    from routes.subject import subject_bp
+    app.register_blueprint(subject_bp, url_prefix='/api/subjects')
+
     
     # Create database tables
     with app.app_context():

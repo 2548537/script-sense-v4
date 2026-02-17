@@ -14,6 +14,22 @@ class GeminiOCRService:
         
         genai.configure(api_key=Config.GEMINI_API_KEY)
         self.model = genai.GenerativeModel('gemini-2.0-flash')
+        
+    def _generate_content_with_retry(self, inputs, config=None, max_retries=3):
+        """Helper to retry API calls on 429 errors"""
+        for attempt in range(max_retries):
+            try:
+                if config:
+                    return self.model.generate_content(inputs, generation_config=config)
+                return self.model.generate_content(inputs)
+            except Exception as e:
+                if "429" in str(e) or "Resource has been exhausted" in str(e):
+                    if attempt < max_retries - 1:
+                        wait_time = (2 ** attempt) + 1  # Exponential backoff: 2s, 3s, 5s
+                        print(f"⚠️ Gemini 429 Limit hit. Retrying in {wait_time}s...")
+                        time.sleep(wait_time)
+                        continue
+                raise e
     
     def transcribe_handwriting(self, image_data, is_path=True):
         """
@@ -53,10 +69,14 @@ class GeminiOCRService:
                - Distinguish between 'v' (velocity) and 'v' (greek nu) if possible, but prioritize readability.
                - Ensure subscripts are clear (e.g., "v_max" or "v_1").
                
-            5. RESPONSE FORMAT: 
+            5. REDUNDANCY & AUTOCORRECTION:
+               - Fix obvious spelling and grammatical errors to make the text meaningful, but preserve the original intent and scientific/mathematical meaning.
+               - Do NOT change the meaning of the equations or symbols.
+               
+            6. RESPONSE FORMAT: 
                - Return ONLY the clean transcription text. No metadata or conversation."""
             
-            response = self.model.generate_content([prompt, image])
+            response = self._generate_content_with_retry([prompt, image])
             
             if response and response.text:
                 return response.text.strip()
@@ -100,7 +120,7 @@ class GeminiOCRService:
             IF NO VALID DIAGRAM IS FOUND:
             - Explicitly respond with "No diagrams found."."""
             
-            response = self.model.generate_content([prompt, image])
+            response = self._generate_content_with_retry([prompt, image])
             
             if response and response.text:
                 has_diagram = "no diagram" not in response.text.lower() and "no valid diagram" not in response.text.lower()
@@ -160,19 +180,25 @@ class GeminiOCRService:
             3. If a diagram has labels (like 'mg', 'R sin θ', 'F cos θ') nearby, they MUST be included in the bounding box.
             4. If there are no diagrams, return an empty list for "diagrams".
             5. Use actual symbols for Math/Science notation.
-            6. Return ONLY the JSON object. No other text."""
+            6. AUTOCORRECTION: Fix obvious spelling and grammatical errors in the transcription to make the text meaningful, but preserve the original intent.
+            7. FORMATTING: Use markdown headers for distinct sections if clear.
+            8. MARGIN NUMBERS (CRITICAL):
+               - Look for question numbers (e.g., '1.', 'Q1', '2a', '3)', '(a)') in the left margin or start of lines.
+               - IMPORTANT: Start the corresponding text block with specific bold labels like '**Q1.**', '**Q2(a).**', etc.
+               - Ensure every answer block is clearly associated with its question identifier if visible.
+            9. Return ONLY the JSON object. No other text."""
             
             # Using JSON mode if supported
             try:
                 try:
-                    response = self.model.generate_content(
+                    response = self._generate_content_with_retry(
                         [prompt, image],
-                        generation_config={"response_mime_type": "application/json"}
+                        config={"response_mime_type": "application/json"}
                     )
                 except Exception as config_err:
                     # Fallback if response_mime_type is not supported
                     print(f"⚠️ JSON mode not supported: {config_err}. Falling back to standard text.")
-                    response = self.model.generate_content([prompt, image])
+                    response = self._generate_content_with_retry([prompt, image])
                 
                 if not response or not response.text:
                     return {
@@ -184,6 +210,9 @@ class GeminiOCRService:
 
                 import json
                 text = response.text
+                print(f"DEBUG_GEMINI_RAW: {text}")
+                
+                import re
                 
                 # Cleanup text if not in JSON-only mode (remove markdown blocks)
                 if "```json" in text:
@@ -191,19 +220,50 @@ class GeminiOCRService:
                 elif "```" in text:
                     text = text.split("```")[1].split("```")[0].strip()
                 
+                # Fallback: Extraction using regex if potential JSON is found but not in code blocks
+                if not text.startswith('{'):
+                    json_match = re.search(r'(\{.*\})', text, re.DOTALL)
+                    if json_match:
+                        text = json_match.group(1)
+
                 try:
                     result = json.loads(text)
+                    
+                    # Parse transcription for question blocks
+                    transcription_text = result.get('transcription', '')
+                    questions = []
+                    
+                    try:
+                        # Regex to find blocks starting with **Q...** or **1...**
+                        # Captures: 1. The ID (e.g. Q1, 1a), 2. The content until next tag
+                        question_blocks = re.split(r'(\*\*(?:Q\d+|Q?\d+[a-z]?|\d+[\.\)])[\w\s\.]*\*\*)', transcription_text)
+                        
+                        if len(question_blocks) > 1:
+                            # 0 is usually empty pre-match text, then pairs of (Header, Content)
+                            current_header = ""
+                            for i in range(1, len(question_blocks), 2):
+                                header = question_blocks[i].replace('*', '').strip()
+                                content = question_blocks[i+1].strip() if i+1 < len(question_blocks) else ""
+                                questions.append({
+                                    'id': header,
+                                    'content': content
+                                })
+                    except Exception as parse_e:
+                        print(f"Error parsing question blocks: {parse_e}")
+
                     return {
-                        'transcription': result.get('transcription', ''),
+                        'transcription': transcription_text,
+                        'questions': questions,
                         'diagrams': result.get('diagrams', []),
                         'success': True
                     }
-                except json.JSONDecodeError:
+                except json.JSONDecodeError as je:
+                    print(f"JSON Decode Failed. Text: {text[:200]}...")
                     return {
                         'transcription': "Failed to parse AI response as JSON.",
                         'diagrams': [],
                         'success': False,
-                        'error': f"JSON Decode Error: {text[:100]}"
+                        'error': f"JSON Decode Error: {str(je)}"
                     }
             except Exception as e:
                 # Handle safety filters or blocked responses

@@ -187,9 +187,9 @@ const PDFViewer = ({ answersheetId, currentPage, onPageSelect, onRegionSelect })
     };
 
     return (
-        <div className="glass-strong h-full rounded-xl overflow-hidden flex flex-col">
+        <div className="glass-strong h-full rounded-xl overflow-hidden flex flex-col relative">
             {/* Controls */}
-            <div className="p-4 border-b border-white border-opacity-10 flex items-center justify-between">
+            <div className="p-4 border-b border-white border-opacity-10 flex items-center justify-between shrink-0 h-16">
                 <h3 className="font-semibold">PDF Viewer</h3>
                 <div className="flex gap-2 items-center">
                     <button
@@ -221,45 +221,50 @@ const PDFViewer = ({ answersheetId, currentPage, onPageSelect, onRegionSelect })
             </div>
 
             {/* PDF Display */}
-            <div className="flex-1 relative group overflow-hidden" ref={containerRef}>
+            <div className="flex-1 w-full relative group overflow-hidden bg-black/20" ref={containerRef}>
                 {/* Floating Navigation */}
-                <div className="absolute inset-y-0 left-0 w-24 z-10 flex items-center justify-start pl-4 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute inset-y-0 left-0 w-24 z-20 flex items-center justify-start pl-4 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
                         onClick={() => currentPage > 0 && onPageSelect(currentPage - 1)}
                         disabled={currentPage === 0}
-                        className={`p-3 rounded-full bg-black/50 text-white backdrop-blur-md border border-white/10 hover:bg-black/70 transition-all pointer-events-auto ${currentPage === 0 ? 'opacity-30 cursor-not-allowed' : ''}`}
+                        className={`p-3 rounded-full bg-black/50 text-white backdrop-blur-md border border-white/10 hover:bg-black/70 transition-all pointer-events-auto shadow-lg hover:scale-110 active:scale-95 ${currentPage === 0 ? 'opacity-30 cursor-not-allowed' : ''}`}
                         title="Previous Page"
                     >
                         <ChevronLeft className="w-8 h-8" />
                     </button>
                 </div>
-                <div className="absolute inset-y-0 right-0 w-24 z-10 flex items-center justify-end pr-4 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute inset-y-0 right-0 w-24 z-20 flex items-center justify-end pr-4 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
                         onClick={() => currentPage < numPages - 1 && onPageSelect(currentPage + 1)}
                         disabled={currentPage === numPages - 1}
-                        className={`p-3 rounded-full bg-black/50 text-white backdrop-blur-md border border-white/10 hover:bg-black/70 transition-all pointer-events-auto ${currentPage === numPages - 1 ? 'opacity-30 cursor-not-allowed' : ''}`}
+                        className={`p-3 rounded-full bg-black/50 text-white backdrop-blur-md border border-white/10 hover:bg-black/70 transition-all pointer-events-auto shadow-lg hover:scale-110 active:scale-95 ${currentPage === numPages - 1 ? 'opacity-30 cursor-not-allowed' : ''}`}
                         title="Next Page"
                     >
                         <ChevronRight className="w-8 h-8" />
                     </button>
                 </div>
 
-                <div className="h-full overflow-auto p-4 flex justify-center">
+                <div className="h-full overflow-auto p-4 custom-scrollbar relative">
                     <div
-                        className="relative inline-block cursor-crosshair shadow-2xl glass rounded-lg touch-none"
+                        className="relative mx-auto inline-block cursor-crosshair shadow-2xl glass rounded-lg touch-none"
                         onMouseDown={handleMouseDown}
                         onMouseMove={handleMouseMove}
                         onMouseUp={handleMouseUp}
                         onTouchStart={handleTouchStart}
                         onTouchMove={handleTouchMove}
                         onTouchEnd={handleTouchEnd}
-                        style={{ lineHeight: 0 }} // Remove unexpected spacing
+                        style={{ lineHeight: 0, minWidth: '200px', minHeight: '300px' }} // Min dimensions to prevent collapse
                     >
                         <Document
                             file={pdfUrl}
                             onLoadSuccess={onDocumentLoadSuccess}
-                            loading={<div className="spinner mx-auto"></div>}
-                            error={<div className="text-red-400 p-4">Failed to load PDF</div>}
+                            loading={
+                                <div className="flex items-center justify-center p-20">
+                                    <div className="spinner"></div>
+                                </div>
+                            }
+                            error={<div className="text-red-400 p-20 flex flex-col items-center"><span className="text-2xl mb-2">⚠️</span>Failed to load PDF</div>}
+                            className="flex justify-center"
                         >
                             <Page
                                 pageNumber={currentPage + 1}
@@ -267,8 +272,12 @@ const PDFViewer = ({ answersheetId, currentPage, onPageSelect, onRegionSelect })
                                 onLoadSuccess={onPageLoadSuccess}
                                 renderTextLayer={false}
                                 renderAnnotationLayer={false}
-                                className="rounded-lg"
-                                loading=""
+                                className="rounded-lg shadow-lg bg-white"
+                                loading={
+                                    <div className="w-[600px] h-[800px] bg-white/5 animate-pulse rounded-lg flex items-center justify-center text-gray-500">
+                                        Loading Page...
+                                    </div>
+                                }
                             />
                         </Document>
 
@@ -280,27 +289,25 @@ const PDFViewer = ({ answersheetId, currentPage, onPageSelect, onRegionSelect })
             </div>
 
             {/* Page Thumbnails */}
-            <div className="p-4 border-t border-white border-opacity-10 overflow-x-auto bg-black bg-opacity-20">
-                <div className="flex gap-2 mx-auto justify-center min-w-min">
-                    {Array.from({ length: numPages }, (_, i) => (
+            <div className="p-4 border-t border-white border-opacity-10 overflow-x-auto bg-black bg-opacity-20 shrink-0 h-32 flex items-center">
+                <div className="flex gap-2 mx-auto justify-center min-w-min h-full items-center">
+                    {numPages > 0 ? Array.from({ length: numPages }, (_, i) => (
                         <button
                             key={i}
                             onClick={() => onPageSelect(i)}
-                            className={`flex-shrink-0 border-2 rounded-md overflow-hidden transition-all transform hover:scale-105 ${i === currentPage
-                                ? 'border-primary-500 shadow-md ring-2 ring-primary-500 ring-opacity-50'
+                            className={`flex-shrink-0 border-2 rounded-md overflow-hidden transition-all transform hover:scale-105 h-20 w-16 bg-white/5 ${i === currentPage
+                                ? 'border-primary-500 shadow-md ring-2 ring-primary-500 ring-opacity-50 scale-105'
                                 : 'border-transparent hover:border-primary-300 opacity-70 hover:opacity-100'
                                 }`}
                         >
-                            <Document file={pdfUrl}>
-                                <Page
-                                    pageNumber={i + 1}
-                                    width={60}
-                                    renderTextLayer={false}
-                                    renderAnnotationLayer={false}
-                                />
-                            </Document>
+                            <div className="w-full h-full flex items-center justify-center text-xs text-gray-500">
+                                {i + 1}
+                            </div>
+                            {/* Optimization: Don't render Document in every thumbnail button to prevent lag */}
                         </button>
-                    ))}
+                    )) : (
+                        <div className="text-gray-500 text-sm">Loading pages...</div>
+                    )}
                 </div>
             </div>
         </div>

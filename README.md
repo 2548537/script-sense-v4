@@ -1,4 +1,4 @@
-# ScriptSense V2 - Team Setup Guide
+# ScriptSense v3 - Team Setup Guide
 
 Welcome to the team! This guide will help you get ScriptSense running on your own computer.
 
@@ -13,7 +13,7 @@ Welcome to the team! This guide will help you get ScriptSense running on your ow
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/2548537/script-sense-v2.git
+git clone https://github.com/2548537/script-sense-v3.git
 cd script-sense-v2
 ```
 

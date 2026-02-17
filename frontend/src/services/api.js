@@ -40,11 +40,12 @@ api.interceptors.response.use(
 );
 
 // Upload services
-export const uploadQuestionPaper = async (file, title, totalQuestions, onProgress) => {
+export const uploadQuestionPaper = async (file, { title, totalQuestions, subjectId }, onProgress) => {
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('title', title);
-    formData.append('total_questions', totalQuestions);
+    if (title) formData.append('title', title);
+    if (totalQuestions) formData.append('total_questions', totalQuestions);
+    if (subjectId) formData.append('subject_id', subjectId);
 
     const response = await api.post('upload/question-paper', formData, {
         onUploadProgress: onProgress
@@ -52,11 +53,12 @@ export const uploadQuestionPaper = async (file, title, totalQuestions, onProgres
     return response.data;
 };
 
-export const uploadAnswerSheet = async (file, studentName, questionPaperId, onProgress) => {
+export const uploadAnswerSheet = async (file, { studentName, questionPaperId, subjectId }, onProgress) => {
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('student_name', studentName);
+    if (studentName) formData.append('student_name', studentName);
     if (questionPaperId) formData.append('question_paper_id', questionPaperId);
+    if (subjectId) formData.append('subject_id', subjectId);
 
     const response = await api.post('upload/answer-sheet', formData, {
         onUploadProgress: onProgress
@@ -64,10 +66,11 @@ export const uploadAnswerSheet = async (file, studentName, questionPaperId, onPr
     return response.data;
 };
 
-export const uploadRubric = async (file, title, onProgress) => {
+export const uploadRubric = async (file, { title, subjectId }, onProgress) => {
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('title', title);
+    if (title) formData.append('title', title);
+    if (subjectId) formData.append('subject_id', subjectId);
 
     const response = await api.post('upload/rubric', formData, {
         onUploadProgress: onProgress
@@ -163,4 +166,113 @@ export const zoomRegion = async (answersheetId, page, coordinates) => {
     return response.data;
 };
 
+export const getMatchedContent = async (answerSheetId) => {
+    const response = await api.get(`evaluate/match-content/${answerSheetId}`);
+    return response.data;
+};
+
+// Question-Answer-Rubric matching services
+export const scanQuestionPaper = async (questionPaperId, page = 0) => {
+    const response = await api.post('evaluate/scan-question-paper', {
+        questionPaperId,
+        page
+    });
+    return response.data;
+};
+
+export const scanRubric = async (rubricId, page = 0) => {
+    const response = await api.post('evaluate/scan-rubric', {
+        rubricId,
+        page
+    });
+    return response.data;
+};
+
+export const getResults = async (subjectId = null) => {
+    const url = subjectId ? `evaluate/results?subject_id=${subjectId}` : 'evaluate/results';
+    const response = await api.get(url);
+    return response.data;
+};
+
+export const exportResultsUrl = (subjectId = null) => {
+    const base = `${API_BASE_URL}/evaluate/results/export`.replace('//evaluate', '/evaluate');
+    return subjectId ? `${base}?subject_id=${subjectId}` : base;
+};
+
+// Subject management services
+export const createSubject = async (name, className, academicYear) => {
+    const response = await api.post('subjects', {
+        name,
+        className,
+        academicYear
+    });
+    return response.data;
+};
+
+export const getSubjects = async () => {
+    const response = await api.get('subjects');
+    return response.data;
+};
+
+export const getSubject = async (subjectId) => {
+    const response = await api.get(`subjects/${subjectId}`);
+    return response.data;
+};
+
+export const deleteSubject = async (subjectId) => {
+    const response = await api.delete(`subjects/${subjectId}`);
+    return response.data;
+};
+
+export const getSubjectStudents = async (subjectId) => {
+    const response = await api.get(`subjects/${subjectId}/students`);
+    return response.data;
+};
+
+export const exportSubjectMarks = (subjectId) => {
+    return `${API_BASE_URL}/subjects/${subjectId}/export-marks`.replace('//subjects', '/subjects');
+};
+
+// Batch upload service
+export const uploadAnswerSheetsBatch = async (files, subjectId, questionPaperId, onProgress) => {
+    const formData = new FormData();
+    files.forEach(file => {
+        formData.append('files', file);
+    });
+    if (subjectId) formData.append('subject_id', subjectId);
+    if (questionPaperId) formData.append('question_paper_id', questionPaperId);
+
+    const response = await api.post('upload/answer-sheets-batch', formData, {
+        onUploadProgress: onProgress
+    });
+    return response.data;
+};
+
+// Question/Rubric content scanning services
+export const scanAllPages = async (type, id) => {
+    const response = await api.post('evaluate/scan-all-pages', { type, id });
+    return response.data;
+};
+
+export const getQuestionContents = async (questionPaperId) => {
+    const response = await api.get(`evaluate/question-contents/${questionPaperId}`);
+    return response.data;
+};
+
+export const getRubricContents = async (rubricId) => {
+    const response = await api.get(`evaluate/rubric-contents/${rubricId}`);
+    return response.data;
+};
+
+export const getSubjectResults = async (subjectId) => {
+    const response = await api.get(`subjects/${subjectId}/results`);
+    return response.data;
+};
+
+export const analyzeBlooms = async (text) => {
+    const response = await api.post('evaluate/analyze-blooms', { text });
+    return response.data;
+};
+
 export default api;
+

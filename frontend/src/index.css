@@ -41,8 +41,8 @@ body {
   border-radius: 16px;
 }
 
-/* Smooth transitions */
-* {
+/* Target specific interactions instead of all elements */
+button, a, input, select, textarea {
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 

@@ -13,6 +13,25 @@ def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in Config.ALLOWED_EXTENSIONS
 
+def get_upload_path(subject_id, folder_type, filename):
+    """Generate subject-based upload path and ensure directory exists"""
+    if subject_id and str(subject_id).lower() not in ['undefined', 'null', '', 'none']:
+        base_dir = os.path.join(Config.UPLOAD_FOLDER, f"subject_{subject_id}", folder_type)
+    else:
+        base_dir = os.path.join(Config.UPLOAD_FOLDER, "misc", folder_type)
+    
+    os.makedirs(base_dir, exist_ok=True)
+    return os.path.join(base_dir, filename)
+
+def parse_id(id_val):
+    """Safe parsing of ID from form data"""
+    if id_val and str(id_val).lower() not in ['undefined', 'null', '', 'none']:
+        try:
+            return int(id_val)
+        except (ValueError, TypeError):
+            return None
+    return None
+
 @upload_bp.route('/question-paper', methods=['POST'])
 def upload_question_paper():
     """Upload a question paper"""
@@ -23,6 +42,7 @@ def upload_question_paper():
         file = request.files['file']
         title = request.form.get('title', '')
         total_questions = request.form.get('total_questions', 0)
+        subject_id = request.form.get('subject_id')
         
         if file.filename == '':
             return jsonify({'error': 'No file selected'}), 400
@@ -30,27 +50,32 @@ def upload_question_paper():
         if not allowed_file(file.filename):
             return jsonify({'error': 'Only PDF files are allowed'}), 400
         
+        # Create database entry
+        final_subject_id = parse_id(subject_id)
+        
         # Create secure filename
         filename = secure_filename(file.filename)
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f"{timestamp}_{filename}"
         
-        # Save file
-        filepath = os.path.join(Config.UPLOAD_FOLDER, 'question_papers', filename)
+        # Save file with subject-based path
+        filepath = get_upload_path(final_subject_id, 'question_papers', filename)
         file.save(filepath)
         
         # Generate thumbnail (non-critical)
-        thumbnail_path = os.path.join(Config.UPLOAD_FOLDER, 'thumbnails', f"thumb_{filename}.png")
+        thumbnail_dir = os.path.join(Config.UPLOAD_FOLDER, 'thumbnails')
+        os.makedirs(thumbnail_dir, exist_ok=True)
+        thumbnail_path = os.path.join(thumbnail_dir, f"thumb_{filename}.png")
         try:
             PDFProcessor.generate_thumbnail(filepath, thumbnail_path)
         except Exception as e:
             print(f"Thumbnail generation skipped: {e}")
-        
-        # Create database entry
+            
         question_paper = QuestionPaper(
+            subject_id=final_subject_id,
             title=title or filename,
             file_path=filepath,
-            total_questions=int(total_questions)
+            total_questions=int(total_questions or 0)
         )
         db.session.add(question_paper)
         db.session.commit()
@@ -74,6 +99,7 @@ def upload_answer_sheet():
         file = request.files['file']
         student_name = request.form.get('student_name', '')
         question_paper_id = request.form.get('question_paper_id')
+        subject_id = request.form.get('subject_id')
         
         if file.filename == '':
             return jsonify({'error': 'No file selected'}), 400
@@ -81,32 +107,31 @@ def upload_answer_sheet():
         if not allowed_file(file.filename):
             return jsonify({'error': 'Only PDF files are allowed'}), 400
         
+        # Parse IDs
+        final_qp_id = parse_id(question_paper_id)
+        final_subject_id = parse_id(subject_id)
+
         # Create secure filename
         filename = secure_filename(file.filename)
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f"{timestamp}_{filename}"
         
-        # Save file
-        filepath = os.path.join(Config.UPLOAD_FOLDER, 'answer_sheets', filename)
+        # Save file with subject-based path
+        filepath = get_upload_path(final_subject_id, 'answer_sheets', filename)
         file.save(filepath)
         print(f"✅ Saved answer sheet to {filepath}")
         
         # Generate thumbnail (non-critical)
-        thumbnail_path = os.path.join(Config.UPLOAD_FOLDER, 'thumbnails', f"thumb_{filename}.png")
+        thumbnail_dir = os.path.join(Config.UPLOAD_FOLDER, 'thumbnails')
+        os.makedirs(thumbnail_dir, exist_ok=True)
+        thumbnail_path = os.path.join(thumbnail_dir, f"thumb_{filename}.png")
         try:
             PDFProcessor.generate_thumbnail(filepath, thumbnail_path)
         except Exception as e:
             print(f"⚠️ Answer sheet thumbnail generation skipped: {e}")
         
-        # Create database entry
-        final_qp_id = None
-        if question_paper_id and str(question_paper_id).lower() not in ['undefined', 'null', '']:
-            try:
-                final_qp_id = int(question_paper_id)
-            except:
-                pass
-
         answer_sheet = AnswerSheet(
+            subject_id=final_subject_id,
             student_name=student_name or 'Unknown Student',
             file_path=filepath,
             question_paper_id=final_qp_id
@@ -133,6 +158,7 @@ def upload_rubric():
         
         file = request.files['file']
         title = request.form.get('title', '')
+        subject_id = request.form.get('subject_id')
         
         if file.filename == '':
             return jsonify({'error': 'No file selected'}), 400
@@ -140,25 +166,30 @@ def upload_rubric():
         if not allowed_file(file.filename):
             return jsonify({'error': 'Only PDF files are allowed'}), 400
         
+        # Parse IDs
+        final_subject_id = parse_id(subject_id)
+
         # Create secure filename
         filename = secure_filename(file.filename)
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f"{timestamp}_{filename}"
         
-        # Save file
-        filepath = os.path.join(Config.UPLOAD_FOLDER, 'rubrics', filename)
+        # Save file with subject-based path
+        filepath = get_upload_path(final_subject_id, 'rubrics', filename)
         file.save(filepath)
         print(f"✅ Saved rubric to {filepath}")
         
         # Generate thumbnail (non-critical)
-        thumbnail_path = os.path.join(Config.UPLOAD_FOLDER, 'thumbnails', f"thumb_{filename}.png")
+        thumbnail_dir = os.path.join(Config.UPLOAD_FOLDER, 'thumbnails')
+        os.makedirs(thumbnail_dir, exist_ok=True)
+        thumbnail_path = os.path.join(thumbnail_dir, f"thumb_{filename}.png")
         try:
             PDFProcessor.generate_thumbnail(filepath, thumbnail_path)
         except Exception as e:
             print(f"⚠️ Rubric thumbnail generation skipped: {e}")
         
-        # Create database entry
         rubric = EvaluationRubric(
+            subject_id=final_subject_id,
             title=title or filename,
             file_path=filepath
         )
@@ -284,4 +315,133 @@ def delete_file(file_id):
         
     except Exception as e:
         db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@upload_bp.route('/answer-sheets-batch', methods=['POST'])
+def upload_answer_sheets_batch():
+    """Upload multiple answer sheets at once with auto student extraction"""
+    try:
+        if 'files' not in request.files:
+            return jsonify({'error': 'No files provided'}), 400
+        
+        files = request.files.getlist('files')
+        subject_id = request.form.get('subject_id')
+        question_paper_id = request.form.get('question_paper_id')
+        
+        if not files or len(files) == 0:
+            return jsonify({'error': 'No files selected'}), 400
+        
+        # Validate subject_id
+        final_subject_id = None
+        if subject_id and str(subject_id).lower() not in ['undefined', 'null', '']:
+            try:
+                final_subject_id = int(subject_id)
+            except:
+                pass
+        
+        # Validate question_paper_id
+        final_qp_id = None
+        if question_paper_id and str(question_paper_id).lower() not in ['undefined', 'null', '']:
+            try:
+                final_qp_id = int(question_paper_id)
+            except:
+                pass
+        
+        from services.student_extractor import StudentExtractor
+        from services.pdf_processor import PDFProcessor
+        
+        extractor = StudentExtractor()
+        results = []
+        
+        for file in files:
+            if file.filename == '':
+                continue
+            
+            if not allowed_file(file.filename):
+                results.append({
+                    'filename': file.filename,
+                    'status': 'error',
+                    'message': 'Invalid file type'
+                })
+                continue
+            
+            try:
+                # Create secure filename
+                filename = secure_filename(file.filename)
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                filename = f"{timestamp}_{filename}"
+                
+                # Save file with subject-based path
+                filepath = get_upload_path(final_subject_id, 'answer_sheets', filename)
+                file.save(filepath)
+                
+                # Extract first page for student info
+                try:
+                    first_page_image = PDFProcessor.pdf_page_to_image(filepath, 0, zoom=2.0)
+                    student_info = extractor.extract_student_info(first_page_image)
+                except Exception as extract_err:
+                    print(f"⚠️ Student extraction failed for {filename}: {extract_err}")
+                    student_info = {'name': None, 'roll_number': None, 'class_name': None}
+                
+                # Use extracted name or fallback to filename
+                student_name = student_info.get('name') or filename.split('.')[0]
+                
+                # Generate thumbnail (non-critical)
+                thumbnail_dir = os.path.join(Config.UPLOAD_FOLDER, 'thumbnails')
+                os.makedirs(thumbnail_dir, exist_ok=True)
+                thumbnail_path = os.path.join(thumbnail_dir, f"thumb_{filename}.png")
+                try:
+                    PDFProcessor.generate_thumbnail(filepath, thumbnail_path)
+                except Exception as e:
+                    print(f"⚠️ Thumbnail generation skipped for {filename}: {e}")
+                
+                # Create database entry
+                answer_sheet = AnswerSheet(
+                    subject_id=final_subject_id,
+                    student_name=student_name,
+                    roll_number=student_info.get('roll_number'),
+                    class_name=student_info.get('class_name'),
+                    file_path=filepath,
+                    question_paper_id=final_qp_id
+                )
+                db.session.add(answer_sheet)
+                db.session.commit()
+                
+                results.append({
+                    'filename': file.filename,
+                    'status': 'success',
+                    'student_name': student_name,
+                    'roll_number': student_info.get('roll_number'),
+                    'id': answer_sheet.id
+                })
+                
+                print(f"✅ Uploaded {file.filename} → {student_name} ({student_info.get('roll_number')})")
+                
+            except Exception as e:
+                db.session.rollback()
+                results.append({
+                    'filename': file.filename,
+                    'status': 'error',
+                    'message': str(e)
+                })
+                print(f"❌ Failed to upload {file.filename}: {str(e)}")
+        
+        # Summary
+        successful = len([r for r in results if r['status'] == 'success'])
+        failed = len([r for r in results if r['status'] == 'error'])
+        
+        return jsonify({
+            'message': f'Uploaded {successful} answer sheets successfully, {failed} failed',
+            'results': results,
+            'summary': {
+                'total': len(results),
+                'successful': successful,
+                'failed': failed
+            }
+        }), 201 if successful > 0 else 400
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Batch upload error: {str(e)}")
         return jsonify({'error': str(e)}), 500

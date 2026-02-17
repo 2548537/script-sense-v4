@@ -1,52 +1,162 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, BookOpen, ChevronLeft, ChevronRight, Save, TrendingUp, CheckCircle, Plus } from 'lucide-react';
-import { saveMarks, getMarks, getTotalMarks, saveReport } from '../services/api';
+import { FileText, BookOpen, ChevronLeft, ChevronRight, Save, TrendingUp, CheckCircle, Plus, Loader, Search, AlertCircle } from 'lucide-react';
+import { saveMarks, getMarks, getTotalMarks, saveReport, getQuestionContents, getRubricContents, scanAllPages } from '../services/api';
 
-const GradingPanel = ({ answersheetId, answerSheet, questionPapers, rubrics, onViewQuestionPaper, onViewRubric }) => {
-    const [currentQuestion, setCurrentQuestion] = useState(1);
+const GradingPanel = ({ answersheetId, answerSheet, questionPapers, rubrics, onViewQuestionPaper, onViewRubric, onGradingProgress }) => {
+    const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
     const [marksAwarded, setMarksAwarded] = useState('');
     const [maxMarks, setMaxMarks] = useState('');
     const [allMarks, setAllMarks] = useState([]);
     const [totalScore, setTotalScore] = useState(null);
     const [saving, setSaving] = useState(false);
 
-    // New State for Enhancements
+    // Question/Rubric content
+    const [questionContents, setQuestionContents] = useState([]);
+    const [rubricContents, setRubricContents] = useState([]);
+    const [detectedQuestions, setDetectedQuestions] = useState([]); // merged list of question numbers
+    const [scanning, setScanning] = useState(false);
+    const [scanStatus, setScanStatus] = useState('');
+
+    // Existing state
     const [activeQuestionPaper, setActiveQuestionPaper] = useState(null);
     const [activeRubric, setActiveRubric] = useState(null);
     const [remarks, setRemarks] = useState('');
     const [evaluationComplete, setEvaluationComplete] = useState(false);
     const [submittingReport, setSubmittingReport] = useState(false);
 
+    // Auto-select first QP and rubric
     useEffect(() => {
-        if (questionPapers.length > 0 && !activeQuestionPaper) setActiveQuestionPaper(questionPapers[0]);
-        if (rubrics.length > 0 && !activeRubric) setActiveRubric(rubrics[0]);
-    }, [questionPapers, rubrics]);
+        if (questionPapers.length > 0 && !activeQuestionPaper) {
+            setActiveQuestionPaper(questionPapers[0]);
+        }
+    }, [questionPapers]);
 
+    useEffect(() => {
+        if (rubrics.length > 0 && !activeRubric) {
+            setActiveRubric(rubrics[0]);
+        }
+    }, [rubrics]);
+
+    // Load question/rubric content when selections change
+    useEffect(() => {
+        if (activeQuestionPaper) {
+            loadQuestionContents(activeQuestionPaper.id);
+        }
+    }, [activeQuestionPaper]);
+
+    useEffect(() => {
+        if (activeRubric) {
+            loadRubricContents(activeRubric.id);
+        }
+    }, [activeRubric]);
+
+    // Build merged question list whenever contents change
+    useEffect(() => {
+        const qNums = new Set();
+        questionContents.forEach(q => qNums.add(q.question_number));
+        rubricContents.forEach(r => qNums.add(r.question_number));
+
+        // Sort by natural order: try numeric first, then string
+        const sorted = [...qNums].sort((a, b) => {
+            const numA = parseFloat(a.replace(/[^0-9.]/g, ''));
+            const numB = parseFloat(b.replace(/[^0-9.]/g, ''));
+            if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+            return a.localeCompare(b);
+        });
+
+        setDetectedQuestions(sorted);
+
+        // Report progress to parent
+        if (onGradingProgress) {
+            const gradedNums = new Set(allMarks.map(m => String(m.question_number)));
+            const graded = sorted.filter(q => {
+                const numOnly = q.replace(/[^0-9]/g, '');
+                return gradedNums.has(q) || gradedNums.has(numOnly);
+            }).length;
+            onGradingProgress({ total: sorted.length, graded });
+        }
+    }, [questionContents, rubricContents, allMarks]);
+
+    // Load marks
     useEffect(() => {
         loadMarks();
         loadTotal();
     }, [answersheetId]);
 
+    // Update marks input when question changes
     useEffect(() => {
-        // Load marks for current question
-        const questionMarks = allMarks.find(m => m.question_number === currentQuestion);
+        if (detectedQuestions.length === 0) return;
+        const qNum = detectedQuestions[currentQuestionIdx];
+        if (!qNum) return;
+
+        // Find saved marks for this question number (try exact match, then numeric)
+        const questionMarks = allMarks.find(m => String(m.question_number) === qNum)
+            || allMarks.find(m => String(m.question_number) === qNum.replace(/[^0-9]/g, ''));
+
         if (questionMarks) {
             setMarksAwarded(questionMarks.marks_awarded.toString());
             setMaxMarks(questionMarks.max_marks.toString());
         } else {
             setMarksAwarded('');
-            setMaxMarks('');
+            // Auto-fill max marks from rubric
+            const rubric = rubricContents.find(r => r.question_number === qNum);
+            if (rubric?.max_marks) {
+                setMaxMarks(rubric.max_marks.toString());
+            } else {
+                setMaxMarks('');
+            }
         }
-    }, [currentQuestion, allMarks]);
+    }, [currentQuestionIdx, detectedQuestions, allMarks, rubricContents]);
 
-    // Check if evaluation is complete (all questions graded)
-    useEffect(() => {
-        if (answerSheet?.status === 'evaluated') {
-            // Maybe load remarks? We didn't fetch them in loadMarks though.
-            // We'll skip pre-loading remarks for now to keep it simple, or add getAnswerSheet call?
-            // props passed doesn't have details. EvaluationPage loads it.
+    const loadQuestionContents = async (qpId) => {
+        try {
+            const result = await getQuestionContents(qpId);
+            if (result.success) {
+                setQuestionContents(result.questions || []);
+            }
+        } catch (err) {
+            console.error('Failed to load question contents:', err);
         }
-    }, [answersheetId]);
+    };
+
+    const loadRubricContents = async (rubricId) => {
+        try {
+            const result = await getRubricContents(rubricId);
+            if (result.success) {
+                setRubricContents(result.rubrics || []);
+            }
+        } catch (err) {
+            console.error('Failed to load rubric contents:', err);
+        }
+    };
+
+    const handleScanAll = async () => {
+        setScanning(true);
+        setScanStatus('Scanning question paper...');
+        try {
+            if (activeQuestionPaper) {
+                const qpResult = await scanAllPages('question_paper', activeQuestionPaper.id);
+                if (qpResult.success) {
+                    setQuestionContents(qpResult.items || []);
+                }
+            }
+
+            if (activeRubric) {
+                setScanStatus('Scanning rubric...');
+                const rubricResult = await scanAllPages('rubric', activeRubric.id);
+                if (rubricResult.success) {
+                    setRubricContents(rubricResult.items || []);
+                }
+            }
+
+            setScanStatus('');
+        } catch (err) {
+            console.error('Scan failed:', err);
+            setScanStatus('Scan failed. Try again.');
+        } finally {
+            setScanning(false);
+        }
+    };
 
     const loadMarks = async () => {
         try {
@@ -72,12 +182,16 @@ const GradingPanel = ({ answersheetId, answerSheet, questionPapers, rubrics, onV
             return;
         }
 
+        const qNum = detectedQuestions[currentQuestionIdx] || (currentQuestionIdx + 1);
+        // Convert question number to integer for storage if possible
+        const qNumInt = parseInt(String(qNum).replace(/[^0-9]/g, '')) || (currentQuestionIdx + 1);
+
         setSaving(true);
         try {
             await saveMarks(
                 answersheetId,
                 activeQuestionPaper?.id,
-                currentQuestion,
+                qNumInt,
                 parseFloat(marksAwarded),
                 parseFloat(maxMarks)
             );
@@ -86,12 +200,8 @@ const GradingPanel = ({ answersheetId, answerSheet, questionPapers, rubrics, onV
             await loadTotal();
 
             // Auto-advance
-            // If strictly within limits, go to next.
-            if (activeQuestionPaper && currentQuestion < activeQuestionPaper.total_questions) {
+            if (currentQuestionIdx < detectedQuestions.length - 1) {
                 handleQuestionNav('next');
-            } else {
-                // If we are at the end, maybe prompt to finish?
-                // For now, just stay on last question so user can review or click "View Marks Card"
             }
         } catch (error) {
             console.error('Failed to save marks:', error);
@@ -102,18 +212,21 @@ const GradingPanel = ({ answersheetId, answerSheet, questionPapers, rubrics, onV
     };
 
     const handleQuestionNav = (direction) => {
-        if (direction === 'next') {
-            setCurrentQuestion(prev => prev + 1);
-            setMarksAwarded('');
-            setMaxMarks('');
-        } else if (direction === 'prev' && currentQuestion > 1) {
-            setCurrentQuestion(prev => prev - 1);
+        if (direction === 'next' && currentQuestionIdx < detectedQuestions.length - 1) {
+            setCurrentQuestionIdx(prev => prev + 1);
+        } else if (direction === 'prev' && currentQuestionIdx > 0) {
+            setCurrentQuestionIdx(prev => prev - 1);
         }
-        setEvaluationComplete(false); // Hide summary if navigating back
+        setEvaluationComplete(false);
     };
 
     const handleAddQuestion = () => {
-        setCurrentQuestion(prev => prev + 1);
+        // Add a manual question number beyond detected ones
+        const nextNum = detectedQuestions.length > 0
+            ? String(parseInt(detectedQuestions[detectedQuestions.length - 1].replace(/[^0-9]/g, '') || '0') + 1)
+            : '1';
+        setDetectedQuestions(prev => [...prev, nextNum]);
+        setCurrentQuestionIdx(detectedQuestions.length); // go to the newly added one
         setMarksAwarded('');
         setMaxMarks('');
         setEvaluationComplete(false);
@@ -132,6 +245,12 @@ const GradingPanel = ({ answersheetId, answerSheet, questionPapers, rubrics, onV
             setSubmittingReport(false);
         }
     };
+
+    // Current question data
+    const currentQNum = detectedQuestions[currentQuestionIdx] || '';
+    const currentQuestionText = questionContents.find(q => q.question_number === currentQNum)?.question_text;
+    const currentRubric = rubricContents.find(r => r.question_number === currentQNum);
+    const totalQuestions = detectedQuestions.length || 1;
 
     if (evaluationComplete) {
         return (
@@ -232,54 +351,86 @@ const GradingPanel = ({ answersheetId, answerSheet, questionPapers, rubrics, onV
                         ))}
                     </select>
                 </div>
+
+                {/* Scan Button */}
+                {detectedQuestions.length === 0 && !scanning && (
+                    <button
+                        onClick={handleScanAll}
+                        disabled={!activeQuestionPaper && !activeRubric}
+                        className="w-full btn btn-primary flex items-center justify-center gap-2 text-sm py-2"
+                    >
+                        <Search className="w-4 h-4" />
+                        Scan Questions & Rubric
+                    </button>
+                )}
+                {scanning && (
+                    <div className="flex items-center gap-2 text-xs text-primary-400 animate-pulse bg-primary-500/10 px-3 py-2 rounded-lg border border-primary-500/20">
+                        <Loader className="w-3 h-3 animate-spin" />
+                        {scanStatus || 'Scanning...'}
+                    </div>
+                )}
+                {detectedQuestions.length > 0 && !scanning && (
+                    <div className="flex items-center justify-between">
+                        <span className="text-[10px] uppercase tracking-wider text-gray-500">
+                            {detectedQuestions.length} questions detected
+                        </span>
+                        <button
+                            onClick={handleScanAll}
+                            className="text-[10px] text-primary-400 hover:text-primary-300 underline"
+                        >
+                            Re-scan
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-auto p-6 space-y-6">
+            <div className="flex-1 overflow-auto p-4 md:p-6 space-y-4">
                 {/* View Documents */}
-                <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
                     <button
                         onClick={() => onViewQuestionPaper(activeQuestionPaper)}
                         disabled={!activeQuestionPaper}
-                        className="w-full btn btn-ghost flex items-center justify-center gap-2"
+                        className="btn btn-ghost flex items-center justify-center gap-1 text-xs py-2"
                     >
-                        <FileText className="w-5 h-5" />
-                        View Question Paper
+                        <FileText className="w-3.5 h-3.5" />
+                        View QP
                     </button>
-
                     <button
                         onClick={() => onViewRubric(activeRubric)}
                         disabled={!activeRubric}
-                        className="w-full btn btn-ghost flex items-center justify-center gap-2"
+                        className="btn btn-ghost flex items-center justify-center gap-1 text-xs py-2"
                     >
-                        <BookOpen className="w-5 h-5" />
+                        <BookOpen className="w-3.5 h-3.5" />
                         View Rubric
                     </button>
                 </div>
 
-                <div className="border-t border-white border-opacity-10 pt-6">
+                <div className="border-t border-white border-opacity-10 pt-4">
                     {/* Question Navigation */}
-                    <div className="mb-6">
-                        <label className="text-sm text-gray-400 mb-2 block">Question Number</label>
+                    <div className="mb-4">
+                        <label className="text-sm text-gray-400 mb-2 block">Question</label>
                         <div className="flex items-center gap-3">
                             <button
                                 onClick={() => handleQuestionNav('prev')}
-                                disabled={currentQuestion === 1}
+                                disabled={currentQuestionIdx === 0}
                                 className="p-2 hover:bg-white hover:bg-opacity-10 rounded disabled:opacity-30"
                             >
                                 <ChevronLeft className="w-5 h-5" />
                             </button>
 
                             <div className="flex-1 text-center">
-                                <span className="text-3xl font-bold gradient-text">{currentQuestion}</span>
-                                {activeQuestionPaper && (
-                                    <span className="text-xs text-gray-400 block">of {activeQuestionPaper.total_questions}</span>
-                                )}
+                                <span className="text-3xl font-bold gradient-text">
+                                    {currentQNum || (currentQuestionIdx + 1)}
+                                </span>
+                                <span className="text-xs text-gray-400 block">
+                                    {currentQuestionIdx + 1} of {totalQuestions}
+                                </span>
                             </div>
 
                             <button
                                 onClick={() => handleQuestionNav('next')}
-                                disabled={activeQuestionPaper && currentQuestion >= activeQuestionPaper.total_questions}
+                                disabled={currentQuestionIdx >= detectedQuestions.length - 1}
                                 className="p-2 hover:bg-white hover:bg-opacity-10 rounded disabled:opacity-30"
                             >
                                 <ChevronRight className="w-5 h-5" />
@@ -295,36 +446,74 @@ const GradingPanel = ({ answersheetId, answerSheet, questionPapers, rubrics, onV
                         </div>
                     </div>
 
+                    {/* Question Text Display */}
+                    {currentQuestionText && (
+                        <div className="mb-4 bg-white bg-opacity-5 rounded-lg border border-white border-opacity-10 overflow-hidden">
+                            <div className="bg-primary-500/10 px-3 py-1.5 border-b border-white border-opacity-5 flex items-center gap-1.5">
+                                <FileText className="w-3 h-3 text-primary-400" />
+                                <span className="text-[10px] uppercase tracking-wider font-bold text-primary-400">Question</span>
+                            </div>
+                            <div className="p-3 text-sm leading-relaxed whitespace-pre-wrap max-h-32 overflow-auto custom-scrollbar">
+                                {currentQuestionText}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Rubric Criteria Display */}
+                    {currentRubric && (
+                        <div className="mb-4 bg-white bg-opacity-5 rounded-lg border border-white border-opacity-10 overflow-hidden">
+                            <div className="bg-accent-500/10 px-3 py-1.5 border-b border-white border-opacity-5 flex items-center gap-1.5">
+                                <BookOpen className="w-3 h-3 text-accent-400" />
+                                <span className="text-[10px] uppercase tracking-wider font-bold text-accent-400">Evaluation Criteria</span>
+                            </div>
+                            <div className="p-3 text-sm leading-relaxed whitespace-pre-wrap max-h-32 overflow-auto custom-scrollbar">
+                                {currentRubric.criteria_text}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* No content hint */}
+                    {!currentQuestionText && !currentRubric && detectedQuestions.length === 0 && !scanning && (
+                        <div className="mb-4 bg-white bg-opacity-5 rounded-lg border border-white border-opacity-10 p-4 text-center">
+                            <AlertCircle className="w-8 h-8 text-gray-500 mx-auto mb-2" />
+                            <p className="text-xs text-gray-400">
+                                Scan the question paper and rubric to auto-detect questions and evaluation criteria.
+                            </p>
+                        </div>
+                    )}
+
                     {/* Marks Input */}
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                         <div>
-                            <label className="text-sm text-gray-400 mb-2 block">Marks Awarded</label>
+                            <label className="text-sm text-gray-400 mb-1 block">Marks Awarded</label>
                             <input
                                 type="number"
                                 step="0.5"
+                                inputMode="decimal"
                                 value={marksAwarded}
                                 onChange={(e) => setMarksAwarded(e.target.value)}
                                 placeholder="0"
-                                className="w-full px-4 py-2 md:py-3 bg-white bg-opacity-10 rounded-lg border border-white border-opacity-20 focus:border-primary-500 outline-none text-lg font-semibold"
+                                className="w-full px-4 py-3 bg-white bg-opacity-10 rounded-lg border border-white border-opacity-20 focus:border-primary-500 outline-none text-xl font-semibold"
                             />
                         </div>
 
                         <div>
-                            <label className="text-sm text-gray-400 mb-2 block">Max Marks</label>
+                            <label className="text-sm text-gray-400 mb-1 block">Max Marks</label>
                             <input
                                 type="number"
                                 step="0.5"
+                                inputMode="decimal"
                                 value={maxMarks}
                                 onChange={(e) => setMaxMarks(e.target.value)}
                                 placeholder="0"
-                                className="w-full px-4 py-2 md:py-3 bg-white bg-opacity-10 rounded-lg border border-white border-opacity-20 focus:border-primary-500 outline-none text-lg font-semibold"
+                                className="w-full px-4 py-3 bg-white bg-opacity-10 rounded-lg border border-white border-opacity-20 focus:border-primary-500 outline-none text-xl font-semibold"
                             />
                         </div>
 
                         <button
                             onClick={handleSaveMarks}
                             disabled={saving || !marksAwarded || !maxMarks}
-                            className="w-full btn btn-primary flex items-center justify-center gap-2"
+                            className="w-full btn btn-primary flex items-center justify-center gap-2 py-3.5 md:py-3 text-base md:text-sm font-bold"
                         >
                             <Save className="w-5 h-5" />
                             {saving ? 'Saving...' : 'Save Marks'}
@@ -334,7 +523,7 @@ const GradingPanel = ({ answersheetId, answerSheet, questionPapers, rubrics, onV
 
                 {/* Total Score */}
                 {totalScore && (
-                    <div className="border-t border-white border-opacity-10 pt-6">
+                    <div className="border-t border-white border-opacity-10 pt-4">
                         <div className="glass p-4 rounded-lg">
                             <div className="flex items-center gap-2 mb-3">
                                 <TrendingUp className="w-5 h-5 text-accent-400" />

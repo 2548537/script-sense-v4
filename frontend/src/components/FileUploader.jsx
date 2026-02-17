@@ -3,7 +3,7 @@ import { Upload, X, FileText, Globe, Zap, Terminal, ChevronDown, ChevronUp, Tras
 import { uploadQuestionPaper, uploadAnswerSheet, uploadRubric, DIRECT_RENDER_URL } from '../services/api';
 import axios from 'axios';
 
-const FileUploader = ({ type, onUploadSuccess, questionPaperId }) => {
+const FileUploader = ({ type, onUploadSuccess, questionPaperId, subjectId }) => {
     const [isDragging, setIsDragging] = useState(false);
     const [file, setFile] = useState(null);
     const [title, setTitle] = useState('');
@@ -143,11 +143,14 @@ const FileUploader = ({ type, onUploadSuccess, questionPaperId }) => {
                 if (type === 'question') {
                     formData.append('title', title);
                     formData.append('total_questions', totalQuestions);
+                    if (subjectId) formData.append('subject_id', subjectId);
                 } else if (type === 'answer') {
                     formData.append('student_name', studentName);
                     if (questionPaperId) formData.append('question_paper_id', questionPaperId);
+                    if (subjectId) formData.append('subject_id', subjectId);
                 } else if (type === 'rubric') {
                     formData.append('title', title);
+                    if (subjectId) formData.append('subject_id', subjectId);
                 }
 
                 // v2.10: DO NOT set headers. Let browser add multipart/form-data with boundary!
@@ -161,11 +164,11 @@ const FileUploader = ({ type, onUploadSuccess, questionPaperId }) => {
             } else {
                 // Standard proxy service
                 if (type === 'question') {
-                    responseData = await uploadQuestionPaper(file, title, totalQuestions, onProgress);
+                    responseData = await uploadQuestionPaper(file, { title, totalQuestions, subjectId }, onProgress);
                 } else if (type === 'answer') {
-                    responseData = await uploadAnswerSheet(file, studentName, questionPaperId, onProgress);
+                    responseData = await uploadAnswerSheet(file, { studentName, questionPaperId, subjectId }, onProgress);
                 } else if (type === 'rubric') {
-                    responseData = await uploadRubric(file, title, onProgress);
+                    responseData = await uploadRubric(file, { title, subjectId }, onProgress);
                 }
             }
 
