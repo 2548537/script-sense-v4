@@ -24,7 +24,19 @@ const api = axios.create({
     timeout: 120000, // 2 minutes timeout for slow mobile uploads
 });
 
-// Add error logging interceptor
+// Attach JWT token to every request if present
+api.interceptors.request.use((config) => {
+    const token = localStorage.getItem('scriptsense_token');
+    if (token) {
+        // Use the proper way to set headers in axios
+        config.headers = config.headers || {};
+        config.headers['Authorization'] = `Bearer ${token}`;
+        config.headers['authorization'] = `Bearer ${token}`;
+    }
+    return config;
+}, (error) => Promise.reject(error));
+
+// Response interceptor: log errors + auto-logout on 401 (stale/invalid token)
 api.interceptors.response.use(
     (response) => response,
     (error) => {
@@ -35,9 +47,25 @@ api.interceptors.response.use(
             data: error.response?.data,
             message: error.message
         });
+
+        // Auto-logout on 401 — token is stale or invalid, clear it
+        if (error.response?.status === 401) {
+            const isAuthRoute = error.config?.url?.includes('auth/login') ||
+                error.config?.url?.includes('auth/register') ||
+                error.config?.url?.includes('auth/seed-custodian');
+            if (!isAuthRoute) {
+                console.warn('🔒 401 received — clearing stale token');
+                localStorage.removeItem('scriptsense_token');
+                localStorage.removeItem('scriptsense_user');
+                // Don't hard-redirect here — let the component handle it gracefully
+                // The ProtectedRoute will redirect to /login on next render
+            }
+        }
+
         return Promise.reject(error);
     }
 );
+
 
 // Upload services
 export const uploadQuestionPaper = async (file, { title, totalQuestions, subjectId }, onProgress) => {
@@ -200,11 +228,14 @@ export const exportResultsUrl = (subjectId = null) => {
 };
 
 // Subject management services
-export const createSubject = async (name, className, academicYear) => {
+export const createSubject = async (name, className, academicYear, firstEvaluatorId, secondEvaluatorId, createdBy) => {
     const response = await api.post('subjects', {
         name,
         className,
-        academicYear
+        academicYear,
+        first_evaluator_id: firstEvaluatorId || null,
+        second_evaluator_id: secondEvaluatorId || null,
+        created_by: createdBy || null,
     });
     return response.data;
 };
@@ -274,5 +305,76 @@ export const analyzeBlooms = async (text) => {
     return response.data;
 };
 
-export default api;
+// ── NEW: Auth API functions ───────────────────────────────────────────────────
 
+export const registerFaculty = async (name, email, password) => {
+    const response = await api.post('auth/register', { name, email, password });
+    return response.data;
+};
+
+export const loginUser = async (email, password) => {
+    const response = await api.post('auth/login', { email, password });
+    return response.data;
+};
+
+export const getCurrentUser = async () => {
+    const response = await api.get('auth/me');
+    return response.data;
+};
+
+export const getFacultyList = async (userId) => {
+    const params = userId ? { user_id: userId } : {};
+    const response = await api.get('auth/faculty', { params });
+    return response.data;
+};
+
+export const seedCustodian = async (name, email, password) => {
+    const response = await api.post('auth/seed-custodian', { name, email, password });
+    return response.data;
+};
+
+// ── NEW: Evaluator assignment ─────────────────────────────────────────────────
+
+export const assignEvaluators = async (subjectId, firstEvaluatorId, secondEvaluatorId) => {
+    const response = await api.put(`subjects/${subjectId}/assign-evaluators`, {
+        first_evaluator_id: firstEvaluatorId,
+        second_evaluator_id: secondEvaluatorId,
+    });
+    return response.data;
+};
+
+// ── NEW: Teacher (First Evaluator) API functions ──────────────────────────────
+
+export const getTeacherSubjects = async (userId) => {
+    const response = await api.get('teacher/subjects', { params: { user_id: userId } });
+    return response.data;
+};
+
+export const getTeacherScripts = async (subjectId, userId) => {
+    const response = await api.get(`teacher/subjects/${subjectId}/scripts`, { params: { user_id: userId } });
+    return response.data;
+};
+
+export const submitTeacherMarks = async (scriptId, marks, remarks, userId) => {
+    const response = await api.post(`teacher/scripts/${scriptId}/marks`, { marks, remarks, user_id: userId });
+    return response.data;
+};
+
+// ── NEW: External Evaluator API functions ─────────────────────────────────────
+
+export const getExternalSubjects = async (userId) => {
+    const response = await api.get('external/subjects', { params: { user_id: userId } });
+    return response.data;
+};
+
+export const getExternalScripts = async (subjectId, userId) => {
+    const response = await api.get(`external/subjects/${subjectId}/scripts`, { params: { user_id: userId } });
+    return response.data;
+};
+
+export const submitExternalMarks = async (scriptId, marks, remarks, userId) => {
+    const response = await api.post(`external/scripts/${scriptId}/marks`, { marks, remarks, user_id: userId });
+    return response.data;
+};
+
+export default api;

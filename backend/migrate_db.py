@@ -3,6 +3,13 @@ import os
 
 DB_PATH = os.path.join('instance', 'evaluation.db')
 
+def add_col_if_missing(cursor, table, column, col_type, existing_cols):
+    if column not in existing_cols:
+        print(f"  Adding '{column}' to {table}...")
+        cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+    else:
+        print(f"  '{column}' already exists in {table} – skipped")
+
 def migrate():
     if not os.path.exists(DB_PATH):
         print(f"Database not found at {DB_PATH}, skipping migration.")
@@ -12,57 +19,62 @@ def migrate():
     cursor = conn.cursor()
 
     try:
-        # Check subjects table
+        # ── 1. users table (new) ─────────────────────────────────────────────
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                name          VARCHAR(200) NOT NULL,
+                email         VARCHAR(200) NOT NULL UNIQUE,
+                password_hash VARCHAR(500) NOT NULL,
+                role          VARCHAR(50)  NOT NULL DEFAULT 'faculty',
+                created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        print("✅ users table ready")
+
+        # ── 2. subjects table ────────────────────────────────────────────────
         cursor.execute("PRAGMA table_info(subjects)")
         subj_columns = [info[1] for info in cursor.fetchall()]
-        
-        if 'class_name' not in subj_columns:
-            print("Adding 'class_name' column to subjects...")
-            cursor.execute("ALTER TABLE subjects ADD COLUMN class_name VARCHAR(100)")
-        
-        if 'academic_year' not in subj_columns:
-            print("Adding 'academic_year' column to subjects...")
-            cursor.execute("ALTER TABLE subjects ADD COLUMN academic_year VARCHAR(20)")
 
-        # Check answer_sheets table
+        add_col_if_missing(cursor, "subjects", "class_name",          "VARCHAR(100)", subj_columns)
+        add_col_if_missing(cursor, "subjects", "academic_year",       "VARCHAR(20)",  subj_columns)
+        add_col_if_missing(cursor, "subjects", "first_evaluator_id",  "INTEGER REFERENCES users(id)", subj_columns)
+        add_col_if_missing(cursor, "subjects", "second_evaluator_id", "INTEGER REFERENCES users(id)", subj_columns)
+        add_col_if_missing(cursor, "subjects", "created_by",          "INTEGER REFERENCES users(id)", subj_columns)
+        print("✅ subjects table ready")
+
+        # ── 3. answer_sheets table ───────────────────────────────────────────
         cursor.execute("PRAGMA table_info(answer_sheets)")
-        columns = [info[1] for info in cursor.fetchall()]
-        
-        if 'remarks' not in columns:
-            print("Adding 'remarks' column...")
-            cursor.execute("ALTER TABLE answer_sheets ADD COLUMN remarks TEXT")
-        else:
-            print("'remarks' column already exists.")
-            
-        if 'status' not in columns:
-            print("Adding 'status' column...")
-            cursor.execute("ALTER TABLE answer_sheets ADD COLUMN status VARCHAR(50) DEFAULT 'pending'")
-        else:
-            print("'status' column already exists.")
-            
-        if 'subject_id' not in columns:
-            print("Adding 'subject_id' column to answer_sheets...")
-            cursor.execute("ALTER TABLE answer_sheets ADD COLUMN subject_id INTEGER REFERENCES subjects(id)")
+        as_columns = [info[1] for info in cursor.fetchall()]
 
-        # Check question_papers table
+        add_col_if_missing(cursor, "answer_sheets", "remarks",        "TEXT",         as_columns)
+        add_col_if_missing(cursor, "answer_sheets", "status",         "VARCHAR(50) DEFAULT 'UPLOADED'", as_columns)
+        add_col_if_missing(cursor, "answer_sheets", "subject_id",     "INTEGER REFERENCES subjects(id)", as_columns)
+        add_col_if_missing(cursor, "answer_sheets", "teacher_marks",  "REAL",         as_columns)
+        add_col_if_missing(cursor, "answer_sheets", "external_marks", "REAL",         as_columns)
+        add_col_if_missing(cursor, "answer_sheets", "final_marks",    "REAL",         as_columns)
+
+        # Normalise any NULL/empty status values
+        cursor.execute("UPDATE answer_sheets SET status = 'UPLOADED' WHERE status IS NULL OR status = ''")
+        print("✅ answer_sheets table ready")
+
+        # ── 4. question_papers table ─────────────────────────────────────────
         cursor.execute("PRAGMA table_info(question_papers)")
         qp_columns = [info[1] for info in cursor.fetchall()]
-        if 'subject_id' not in qp_columns:
-            print("Adding 'subject_id' column to question_papers...")
-            cursor.execute("ALTER TABLE question_papers ADD COLUMN subject_id INTEGER REFERENCES subjects(id)")
+        add_col_if_missing(cursor, "question_papers", "subject_id", "INTEGER REFERENCES subjects(id)", qp_columns)
+        print("✅ question_papers table ready")
 
-        # Check evaluation_rubrics table
+        # ── 5. evaluation_rubrics table ──────────────────────────────────────
         cursor.execute("PRAGMA table_info(evaluation_rubrics)")
         er_columns = [info[1] for info in cursor.fetchall()]
-        if 'subject_id' not in er_columns:
-            print("Adding 'subject_id' column to evaluation_rubrics...")
-            cursor.execute("ALTER TABLE evaluation_rubrics ADD COLUMN subject_id INTEGER REFERENCES subjects(id)")
+        add_col_if_missing(cursor, "evaluation_rubrics", "subject_id", "INTEGER REFERENCES subjects(id)", er_columns)
+        print("✅ evaluation_rubrics table ready")
 
         conn.commit()
-        print("Migration successful.")
-        
+        print("\n🎉 Migration complete! Restart the backend server.")
+
     except Exception as e:
-        print(f"Migration failed: {e}")
+        print(f"❌ Migration failed: {e}")
         conn.rollback()
     finally:
         conn.close()

@@ -13,6 +13,9 @@ class Config:
     
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
+    # Secret key for JWT signing
+    SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'scriptsense-dev-secret-key-change-in-production')
+    
     # File Upload
     UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', 'uploads')
     MAX_FILE_SIZE = int(os.getenv('MAX_FILE_SIZE', 52428800))  # 50MB default

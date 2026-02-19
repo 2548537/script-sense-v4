@@ -48,7 +48,10 @@ const EvaluationPage = () => {
             );
             if (!confirmed) return;
         }
-        navigate('/');
+        // Return to teacher dashboard if came from there, otherwise home
+        const from = sessionStorage.getItem('evaluateFrom') || '/teacher';
+        sessionStorage.removeItem('evaluateFrom');
+        navigate(from);
     }, [gradingProgress, navigate]);
 
     useEffect(() => {

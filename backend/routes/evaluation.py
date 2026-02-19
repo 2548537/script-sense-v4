@@ -262,30 +262,44 @@ def get_pdf_info(answer_sheet_id):
         return jsonify({'error': str(e)}), 500
 @evaluation_bp.route('/save-report', methods=['POST'])
 def save_report():
-    """Save final evaluation report"""
+    """Save final evaluation report and write teacher_marks to AnswerSheet."""
     try:
         data = request.json
         answer_sheet_id = data.get('answersheetId')
         remarks = data.get('remarks')
-        
+
         if not answer_sheet_id:
             return jsonify({'error': 'Missing answer sheet ID'}), 400
-            
+
         answer_sheet = AnswerSheet.query.get_or_404(answer_sheet_id)
-        
+
+        # Compute total marks from Mark table
+        marks = Mark.query.filter_by(answer_sheet_id=answer_sheet_id).all()
+        total_awarded = sum(m.marks_awarded for m in marks) if marks else None
+
         answer_sheet.remarks = remarks
-        answer_sheet.status = 'evaluated'
-        
+        answer_sheet.status = 'FIRST_DONE'  # Mark as first evaluation done
+
+        # Write teacher_marks so TeacherDashboard can display it
+        if total_awarded is not None:
+            answer_sheet.teacher_marks = total_awarded
+
+        # If external_marks already exist, compute final
+        if answer_sheet.external_marks is not None and total_awarded is not None:
+            answer_sheet.final_marks = (total_awarded + answer_sheet.external_marks) / 2
+            answer_sheet.status = 'SECOND_DONE'
+
         db.session.commit()
-        
+
         return jsonify({
             'message': 'Report saved successfully',
             'data': answer_sheet.to_dict()
         }), 200
-        
+
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
 
 @evaluation_bp.route('/results', methods=['GET'])
 def get_results():

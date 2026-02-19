@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, make_response
-from models import db, Subject, QuestionPaper, AnswerSheet, EvaluationRubric, Mark
+from models import db, Subject, QuestionPaper, AnswerSheet, EvaluationRubric, Mark, User
 import io
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill
@@ -8,20 +8,38 @@ subject_bp = Blueprint('subject', __name__)
 
 @subject_bp.route('', methods=['POST'])
 def create_subject():
-    """Create a new subject/class"""
+    """Create a new subject/class.
+    
+    Accepts optional first_evaluator_id and second_evaluator_id to assign
+    evaluators at creation time (custodian workflow).
+    """
     try:
         data = request.json
         name = data.get('name')
         class_name = data.get('className')
         academic_year = data.get('academicYear')
+        first_evaluator_id = data.get('first_evaluator_id')
+        second_evaluator_id = data.get('second_evaluator_id')
+        created_by = data.get('created_by')  # Optional: custodian user id
         
         if not name:
             return jsonify({'error': 'Subject name is required'}), 400
         
+        # Validate evaluator IDs if provided
+        if first_evaluator_id:
+            if not User.query.get(first_evaluator_id):
+                return jsonify({'error': 'First evaluator not found'}), 404
+        if second_evaluator_id:
+            if not User.query.get(second_evaluator_id):
+                return jsonify({'error': 'Second evaluator not found'}), 404
+        
         subject = Subject(
             name=name,
             class_name=class_name,
-            academic_year=academic_year
+            academic_year=academic_year,
+            first_evaluator_id=first_evaluator_id,
+            second_evaluator_id=second_evaluator_id,
+            created_by=created_by
         )
         
         db.session.add(subject)
@@ -102,6 +120,54 @@ def delete_subject(subject_id):
     except Exception as e:
         db.session.rollback()
         print(f"❌ Error deleting subject: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@subject_bp.route('/<int:subject_id>/assign-evaluators', methods=['PUT'])
+def assign_evaluators(subject_id):
+    """Assign or reassign first and second evaluators to a subject.
+    
+    Body: { first_evaluator_id: int|null, second_evaluator_id: int|null }
+    Custodian-only operation (no JWT enforcement here to keep backward compat;
+    the frontend enforces this via role-based routing).
+    """
+    try:
+        subject = Subject.query.get_or_404(subject_id)
+        data = request.json
+
+        first_id = data.get('first_evaluator_id')
+        second_id = data.get('second_evaluator_id')
+
+        # Validate evaluator IDs
+        if first_id is not None:
+            if not User.query.get(first_id):
+                return jsonify({'error': 'First evaluator not found'}), 404
+            subject.first_evaluator_id = first_id
+
+        if second_id is not None:
+            if not User.query.get(second_id):
+                return jsonify({'error': 'Second evaluator not found'}), 404
+            subject.second_evaluator_id = second_id
+
+        # Allow explicit null to unassign
+        if 'first_evaluator_id' in data and data['first_evaluator_id'] is None:
+            subject.first_evaluator_id = None
+        if 'second_evaluator_id' in data and data['second_evaluator_id'] is None:
+            subject.second_evaluator_id = None
+
+        db.session.commit()
+
+        print(f"✅ Evaluators assigned for subject {subject_id}: "
+              f"first={subject.first_evaluator_id}, second={subject.second_evaluator_id}")
+
+        return jsonify({
+            'message': 'Evaluators assigned successfully',
+            'subject': subject.to_dict()
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Error assigning evaluators: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 

@@ -7,12 +7,21 @@ export default defineConfig({
         exclude: ['pdfjs-dist']
     },
     server: {
-        port: 5173,
+        port: 5174,
         host: true, // Enable listening on all addresses (for mobile access)
         proxy: {
             '/api': {
                 target: 'http://localhost:5000',
-                changeOrigin: true
+                changeOrigin: true,
+                secure: false,
+                configure: (proxy) => {
+                    proxy.on('proxyReq', (proxyReq, req) => {
+                        // Forward Authorization header explicitly
+                        if (req.headers['authorization']) {
+                            proxyReq.setHeader('Authorization', req.headers['authorization']);
+                        }
+                    });
+                }
             }
         }
     }
